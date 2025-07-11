@@ -1,0 +1,8 @@
+# Reglas udev para dispositivos SecuGen
+SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="2201", MODE="0666", GROUP="plugdev", TAG+="uaccess", SYMLINK+="secugen_device"
+SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="2201", SUBSYSTEM=="usb_device", MODE="0666", GROUP="plugdev"
+
+# Reglas adicionales para otros modelos SecuGen
+SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="0300", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idProduct}=="0200", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idProduct}=="1000", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess" 
