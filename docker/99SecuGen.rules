@@ -1,8 +1,11 @@
 # Reglas udev para dispositivos SecuGen
+# Crear symlink persistente para el dispositivo principal
 SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="2201", MODE="0666", GROUP="plugdev", TAG+="uaccess", SYMLINK+="secugen_device"
-SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="2201", SUBSYSTEM=="usb_device", MODE="0666", GROUP="plugdev"
+
+# Crear symlink adicional para el dispositivo USB
+SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="2201", SUBSYSTEM=="usb_device", MODE="0666", GROUP="plugdev", SYMLINK+="secugen_usb_device"
 
 # Reglas adicionales para otros modelos SecuGen
-SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="0300", MODE="0666", GROUP="plugdev", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTR{idProduct}=="0200", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess"
-SUBSYSTEM=="usb", ATTR{idProduct}=="1000", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess" 
+SUBSYSTEM=="usb", ATTR{idVendor}=="1162", ATTR{idProduct}=="0300", MODE="0666", GROUP="plugdev", TAG+="uaccess", SYMLINK+="secugen_device_0300"
+SUBSYSTEM=="usb", ATTR{idProduct}=="0200", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess", SYMLINK+="secugen_device_0200"
+SUBSYSTEM=="usb", ATTR{idProduct}=="1000", ATTR{idVendor}=="1162", MODE="0666", GROUP="plugdev", TAG+="uaccess", SYMLINK+="secugen_device_1000" 

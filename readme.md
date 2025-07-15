@@ -1,6 +1,141 @@
 # 🔐 Driver Bloqueo Digital Huella
 **Sistema de control para lector de huellas SecuGen con API REST y pruebas de stress.**  
 
+## 🖥️ **MIGRACIÓN A OTRO PC - SISTEMA ROBUSTO**
+
+### 🚀 **Scripts Para Que El Lector NUNCA Falle**
+
+Si llevas este proyecto a otro PC, ejecuta estos scripts en orden para garantizar que el lector funcione siempre:
+
+#### **1. Configuración Inicial (Solo la primera vez)**
+```bash
+# Copiar el proyecto
+git clone <tu-repositorio>
+cd driver-bloqueo-digital-huella-main
+
+# Instalar dependencias del sistema
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv libusb-0.1-4 build-essential
+
+# Crear entorno virtual
+python3 -m venv venv
+source venv/bin/activate
+pip install flask flask-cors numpy requests
+
+# Configurar permisos USB (CRÍTICO)
+sudo usermod -a -G dialout $USER
+sudo usermod -a -G plugdev $USER
+
+# Instalar reglas udev para dispositivo persistente
+sudo cp docker/99SecuGen.rules /etc/udev/rules.d/
+sudo chmod 644 /etc/udev/rules.d/99SecuGen.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
+# Hacer ejecutables los scripts
+chmod +x iniciar_sistema_robusto.sh parar_sistema.sh
+chmod +x reset_usb_device.py monitor_sistema_completo.py test_sistema_robusto.py
+
+# REINICIAR EL SISTEMA (necesario para grupos de usuario)
+sudo reboot
+```
+
+#### **2. Uso Diario (Después del reinicio)**
+```bash
+# COMANDO PRINCIPAL - Iniciar sistema robusto
+./iniciar_sistema_robusto.sh
+
+# Responder 'y' cuando pregunte sobre el monitor para máxima robustez
+```
+
+#### **3. Verificación (Opcional)**
+```bash
+# Probar que funciona
+python3 test_sistema_robusto.py
+
+# Probar API
+curl -X POST http://localhost:5000/initialize
+```
+
+#### **4. Parada Segura (Al terminar)**
+```bash
+# Parar sistema de forma segura
+./parar_sistema.sh
+```
+
+### 🛡️ **Scripts de Emergencia**
+
+Si algo falla, ejecuta en orden:
+
+```bash
+# 1. Parar todo
+./parar_sistema.sh
+
+# 2. Reset USB (soluciona Error 2)
+sudo python3 reset_usb_device.py
+
+# 3. Reiniciar sistema
+./iniciar_sistema_robusto.sh
+
+# 4. Verificar
+python3 test_sistema_robusto.py
+```
+
+### 📋 **Checklist de Migración**
+
+**✅ Antes de copiar el proyecto:**
+- [ ] Dispositivo SecuGen conectado
+- [ ] Ubuntu/Debian actualizado
+- [ ] Permisos de sudo disponibles
+
+**✅ Después de la configuración inicial:**
+- [ ] Ejecutar `lsusb | grep "1162:2201"` - debe mostrar el dispositivo
+- [ ] Ejecutar `ls -la /dev/secugen_device` - debe mostrar el symlink
+- [ ] Ejecutar `groups` - debe incluir 'dialout' y 'plugdev'
+
+**✅ Para uso diario:**
+- [ ] Siempre usar `./iniciar_sistema_robusto.sh`
+- [ ] Siempre usar `./parar_sistema.sh` para parar
+- [ ] Nunca usar `python3 app.py` directamente
+
+### 🔧 **Archivos Críticos para Migración**
+
+Asegúrate de copiar estos archivos:
+- `iniciar_sistema_robusto.sh` - **CRÍTICO** - Inicio robusto
+- `parar_sistema.sh` - **CRÍTICO** - Parada segura
+- `monitor_sistema_completo.py` - **IMPORTANTE** - Monitoreo automático
+- `reset_usb_device.py` - **IMPORTANTE** - Reset USB mejorado
+- `test_sistema_robusto.py` - **ÚTIL** - Pruebas del sistema
+- `docker/99SecuGen.rules` - **CRÍTICO** - Reglas udev
+- `app.py` - **CRÍTICO** - Aplicación principal
+- `app_backup.py` - **IMPORTANTE** - Backup para restauración
+- `sdk/` - **CRÍTICO** - SDK de SecuGen
+- `lib/` - **CRÍTICO** - Librerías
+
+### 🎯 **Comandos Rápidos de Referencia**
+
+```bash
+# Inicio completo (UN SOLO COMANDO)
+./iniciar_sistema_robusto.sh
+
+# Parada segura
+./parar_sistema.sh
+
+# Reset si falla
+sudo python3 reset_usb_device.py
+
+# Verificar estado
+python3 test_sistema_robusto.py
+
+# Ver logs
+tail -f logs/sistema_robusto.log
+```
+
+### 📄 **Cheat Sheet Completo**
+Para una referencia rápida completa, consulta: **[COMANDOS_MIGRACION_PC.md](./COMANDOS_MIGRACION_PC.md)**
+
+---
+
 ## 📚 Documentación Completa
 
 ### 🚀 **Configuración para Producción**
@@ -8,6 +143,13 @@
 - ⚙️ **Configuración automática con un solo comando**
 - 🎮 **Scripts de administración incluidos**
 - 📊 **Monitoreo y backups automáticos**
+
+### 🛡️ **Sistema Robusto (NUEVO)**
+- 📖 **[README_SISTEMA_ROBUSTO.md](./README_SISTEMA_ROBUSTO.md)** - Guía completa del sistema robusto
+- 📖 **[RESUMEN_MEJORAS.md](./RESUMEN_MEJORAS.md)** - Resumen ejecutivo de mejoras
+- 🔧 **Prevención automática de problemas**
+- 🔄 **Reset USB automático**
+- 🔍 **Monitoreo continuo**
 
 ### 🧪 **Pruebas de Stress**
 - 📖 **[README_STRESS_TESTS.md](./README_STRESS_TESTS.md)** - Guía completa de pruebas de stress
@@ -43,6 +185,22 @@
 
 # 4. Verificar estado
 ./status_production.sh
+```
+
+## 🎯 Inicio Rápido Sistema Robusto (RECOMENDADO)
+
+```bash
+# 1. Configuración inicial (solo primera vez)
+./configurar_nuevo_pc.sh
+
+# 2. Iniciar sistema robusto
+./iniciar_sistema_robusto.sh
+
+# 3. Verificar funcionamiento
+python3 test_sistema_robusto.py
+
+# 4. Parar sistema
+./parar_sistema.sh
 ```
 
 ## 📋 Requisitos Previos  
@@ -244,7 +402,7 @@ ls -la backups/               # Ver backups disponibles
 ```
 
 ## 📁 Estructura del Proyecto
-```bash
+    ```bash
 driver-bloqueo-digital-huella/
 ├── 📄 Aplicación Principal
 │   ├── app.py                          # API Flask principal
