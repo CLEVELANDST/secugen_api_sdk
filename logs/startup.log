@@ -3003,3 +3003,9 @@
 [2025-07-15 12:45:15] Aplicación iniciada con PID: 32964
 [2025-07-15 12:45:18] ✅ Aplicación iniciada exitosamente
 [2025-07-15 12:45:21] ⚠️ API no responde al endpoint de salud
+[2025-07-15 13:19:51] Iniciando aplicación en modo producción...
+[2025-07-15 13:19:51] Verificando conexión del dispositivo...
+[2025-07-15 13:19:51] Iniciando aplicación en puerto 5000...
+[2025-07-15 13:19:51] Aplicación iniciada con PID: 48404
+[2025-07-15 13:19:54] ✅ Aplicación iniciada exitosamente
+[2025-07-15 13:19:56] ⚠️ API no responde al endpoint de salud

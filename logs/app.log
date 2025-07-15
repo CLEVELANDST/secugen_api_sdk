@@ -14,7 +14,4 @@
  * Running on all addresses.
    WARNING: This is a development server. Do not use it in a production deployment.
  * Running on http://192.168.1.108:5000/ (Press CTRL+C to quit)
-127.0.0.1 - - [15/Jul/2025 12:45:21] "[31m[1mGET /initialize HTTP/1.1[0m" 405 -
-127.0.0.1 - - [15/Jul/2025 12:46:43] "GET /templates HTTP/1.1" 200 -
-127.0.0.1 - - [15/Jul/2025 12:46:52] "POST /initialize HTTP/1.1" 200 -
-127.0.0.1 - - [15/Jul/2025 13:10:14] "POST /led HTTP/1.1" 200 -
+127.0.0.1 - - [15/Jul/2025 13:19:56] "[31m[1mGET /initialize HTTP/1.1[0m" 405 -
