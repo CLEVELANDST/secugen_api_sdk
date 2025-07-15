@@ -1,78 +1,109 @@
-# Imagen base
-FROM ubuntu:20.04
+# Dockerfile para SecuGen Fingerprint API
+# =====================================
+# Imagen base optimizada con sistema robusto integrado
 
-# Evitar interacciones durante la instalación
+FROM ubuntu:22.04
+
+# Metadatos
+LABEL maintainer="SecuGen Fingerprint API"
+LABEL version="2.0.0"
+LABEL description="API REST para lector de huellas SecuGen con sistema robusto"
+
+# Variables de entorno
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV FLASK_ENV=production
+ENV FLASK_APP=app.py
+ENV WORKDIR=/app
+
+# Crear usuario no-root para seguridad
+RUN groupadd -g 1000 secugen && \
+    useradd -u 1000 -g secugen -m -s /bin/bash secugen && \
+    usermod -a -G dialout,plugdev secugen
 
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    libgtk2.0-dev \
+    python3-venv \
     libusb-0.1-4 \
-    libusb-dev \
-    build-essential \
-    udev \
-    gcc \
-    python3-dev \
-    usbutils \
     libusb-1.0-0 \
-    libusb-1.0-0-dev \
-    && apt-get clean \
+    build-essential \
+    curl \
+    wget \
+    git \
+    lsof \
+    usbutils \
+    udev \
+    sudo \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# Crear grupo y usuario para SecuGen
-RUN groupadd -r secugen && \
-    groupmod -g 1001 plugdev && \
-    useradd -r -g secugen -G plugdev,dialout secugen
+# Crear directorio de trabajo
+WORKDIR $WORKDIR
 
-WORKDIR /app
+# Copiar archivos de dependencias primero (para cachear layers)
+COPY requirements.txt ./
 
-# Configurar Python y bibliotecas
-RUN mkdir -p /usr/local/lib/python3.8/dist-packages/sgfplib
+# Instalar dependencias Python
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir -r requirements.txt
 
-# Copiar SDK y configurar
-COPY --chown=secugen:secugen sdk /usr/local/lib/python3.8/dist-packages/sgfplib/
+# Copiar archivos del proyecto
+COPY . .
 
-# Copiar todas las bibliotecas compartidas
-COPY lib/linux3/*.so /usr/local/lib/
-RUN ldconfig
+# Crear directorios necesarios
+RUN mkdir -p logs templates backups config
 
-# Instalar dependencias de Python como root
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt && \
-    pip3 install --no-cache-dir pyusb
+# Copiar SDK y librerías
+COPY sdk/ ./sdk/
+COPY lib/ ./lib/
+COPY python/ ./python/
 
-# Copiar y aplicar reglas udev
-COPY docker/99SecuGen.rules /etc/udev/rules.d/
-RUN chmod 644 /etc/udev/rules.d/99SecuGen.rules && \
-    chown root:root /etc/udev/rules.d/99SecuGen.rules
+# Configurar permisos para archivos ejecutables
+RUN chmod +x iniciar_sistema_robusto.sh parar_sistema.sh && \
+    chmod +x reset_usb_device.py monitor_sistema_completo.py test_sistema_robusto.py && \
+    chmod +x docker-entrypoint.sh
 
-# Copiar el resto de archivos
-COPY --chown=secugen:secugen . .
+# Configurar permisos para el usuario secugen
+RUN chown -R secugen:secugen $WORKDIR
 
-# Configurar permisos
-RUN mkdir -p /app/images && \
-    chown -R secugen:secugen /app && \
-    chmod -R 755 /app && \
-    chmod 777 /app/images && \
-    chmod +x start.sh && \
-    chmod -R 777 /usr/local/lib/*.so && \
-    chmod -R 777 /dev/bus/usb || true
+# Crear archivo de configuración para supervisord
+RUN echo '[supervisord]' > /etc/supervisor/conf.d/secugen.conf && \
+    echo 'nodaemon=true' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'user=root' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo '' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo '[program:secugen-api]' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'command=/app/docker-entrypoint.sh' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'directory=/app' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'user=secugen' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'stderr_logfile=/app/logs/docker_error.log' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'stdout_logfile=/app/logs/docker_output.log' >> /etc/supervisor/conf.d/secugen.conf && \
+    echo 'environment=PYTHONPATH="/app"' >> /etc/supervisor/conf.d/secugen.conf
 
-# Configurar permisos adicionales para USB
-RUN chmod -R 777 /usr/local/lib/*.so && \
-    chmod 666 /dev/bus/usb/*/* || true && \
-    chmod 755 /dev/bus/usb && \
-    chmod 755 /dev/bus/usb/* && \
-    chown root:plugdev /dev/bus/usb/*/* || true && \
-    ldconfig
+# Configurar sudoers para usuario secugen (necesario para reset USB)
+RUN echo 'secugen ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/unbind' >> /etc/sudoers && \
+    echo 'secugen ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/drivers/usb/bind' >> /etc/sudoers && \
+    echo 'secugen ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/devices/*/reset' >> /etc/sudoers && \
+    echo 'secugen ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/bus/usb/devices/*/power/control' >> /etc/sudoers && \
+    echo 'secugen ALL=(ALL) NOPASSWD: /sbin/udevadm' >> /etc/sudoers && \
+    echo 'secugen ALL=(ALL) NOPASSWD: /usr/sbin/lsof' >> /etc/sudoers
 
-# Cambiar al usuario secugen
-USER secugen
-
+# Exponer puerto
 EXPOSE 5000
 
-CMD ["./start.sh"]
+# Volúmenes para datos persistentes
+VOLUME ["/app/logs", "/app/templates", "/app/backups"]
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:5000/ || exit 1
+
+# Cambiar a usuario no-root
+USER secugen
+
+# Comando de inicio
+CMD ["python3", "app.py"]

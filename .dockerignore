@@ -1,20 +1,149 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Archivos y directorios a excluir de Docker build
+# ===============================================
+
+# Archivos de Git
+.git
+.gitignore
+.gitattributes
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
-.tox
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+# lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Archivos de logs
+logs/
 *.log
-.pytest_cache
+
+# Archivos temporales
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Archivos de backup
+*.bak
+*.backup
+backups/
+
+# Archivos de configuración local
 .env
-.venv
-data/*
+.env.local
+.env.production
+config/local.*
+
+# Archivos de imágenes grandes
+images/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.raw
+
+# Archivos de documentación grandes
+*.pdf
+*.doc
+*.docx
+
+# Archivos de base de datos
+*.db
+*.sqlite
+*.sqlite3
+
+# Archivos de Node.js (si los hay)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+*.pid
+
+# Archivos de prueba
+# test_*.py
+*_test.py
+tests/
+
+# Archivos de Docker
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Archivos de backup de aplicación
+app_backup.py
+*.bak
+
+# Archivos de configuración de producción
+production.env
+*.key
+*.pem
+*.crt
+
+# Archivos de monitoreo local
+# monitor_*.py
+
+# Archivos de script de desarrollo
+dev_*.py
+debug_*.py
+
+# Archivos de configuración de host
+docker-setup-host.sh
+configurar_nuevo_pc.sh
+
+# Archivos de documentación
+*.md
+README*
+CHANGELOG*
+
+# Archivos de templates guardados
+templates/
+saved_templates/
+
+# Archivos de caché
+.cache/
+.pytest_cache/
+
+# Archivos de coverage
+.coverage
+htmlcov/
+
+# Archivos de profiling
+*.prof

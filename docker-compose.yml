@@ -1,23 +1,154 @@
 version: '3.8'
 
 services:
-  api:
+  secugen-api:
     build: .
-    privileged: true
-    devices:
-      - "/dev/bus/usb:/dev/bus/usb"
-    volumes:
-      - "/dev/bus/usb:/dev/bus/usb"
-      - "./images:/app/images"
+    container_name: secugen-fingerprint-api
+    restart: always
+    
+    # Configuración de red
     ports:
-      - "5000:5000"
+      - "5500:5000"
+    
+    # Configuración de privilegios (necesario para USB)
+    privileged: true
+    
+    # Dispositivos USB
+    devices:
+      - /dev/bus/usb:/dev/bus/usb:rw
+    
+    # Volúmenes para persistencia
+    volumes:
+      - ./logs:/app/logs
+      - ./templates:/app/templates
+      - ./backups:/app/backups
+      - /dev:/dev:rw
+      - /sys:/sys:rw
+      - /run/udev:/run/udev:ro
+      - /etc/udev/rules.d:/etc/udev/rules.d:ro
+    
+    # Variables de entorno
     environment:
-      - LD_LIBRARY_PATH=/usr/local/lib
-    restart: unless-stopped
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - TZ=America/Mexico_City
+    
+    # Configuración de logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Configuración de recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Configuración de red
+    networks:
+      - secugen-network
+    
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Dependencias
+    depends_on:
+      - secugen-monitor
 
-  db:
-    image: postgres:13
+  # Servicio de monitoreo
+  secugen-monitor:
+    build: .
+    container_name: secugen-monitor
+    restart: always
+    
+    # Configuración de privilegios
+    privileged: true
+    
+    # Dispositivos USB
+    devices:
+      - /dev/bus/usb:/dev/bus/usb:rw
+    
+    # Volúmenes
+    volumes:
+      - ./logs:/app/logs
+      - /dev:/dev:rw
+      - /sys:/sys:rw
+      - /run/udev:/run/udev:ro
+    
+    # Variables de entorno
     environment:
-      POSTGRES_DB: fingerprints
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - TZ=America/Mexico_City
+    
+    # Comando personalizado para monitoreo
+    command: ["python3", "monitor_sistema_completo.py"]
+    
+    # Configuración de logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+    
+    # Configuración de recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    
+    # Configuración de red
+    networks:
+      - secugen-network
+
+  # Servicio de logs (opcional)
+  secugen-logs:
+    image: alpine:latest
+    container_name: secugen-logs
+    restart: always
+    
+    # Volúmenes para logs
+    volumes:
+      - ./logs:/logs:ro
+    
+    # Comando para mostrar logs
+    command: ["tail", "-f", "/logs/docker_output.log"]
+    
+    # Configuración de red
+    networks:
+      - secugen-network
+
+# Configuración de red
+networks:
+  secugen-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volúmenes nombrados (opcional)
+volumes:
+  secugen-logs:
+    driver: local
+  secugen-templates:
+    driver: local
+  secugen-backups:
+    driver: local

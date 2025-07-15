@@ -1,0 +1,24 @@
+# Configuración Docker SecuGen
+# ============================
+
+Fecha configuración: mar 15 jul 2025 11:48:33 -04
+Usuario: said
+Docker: Docker version 27.5.1, build 27.5.1-0ubuntu3~24.04.2
+Docker Compose: docker-compose version 1.29.2, build unknown
+
+# Comandos Docker:
+# Construir: docker-compose build
+# Iniciar: docker-compose up -d
+# Parar: docker-compose down
+# Logs: docker-compose logs -f
+# Estado: docker-compose ps
+
+# Comandos de contenedor:
+# Acceder: docker exec -it secugen-fingerprint-api bash
+# Reiniciar: docker-compose restart
+# Limpiar: docker system prune -a
+
+# Verificaciones:
+# - lsusb | grep "1162:2201" (dispositivo)
+# - docker ps (contenedores)
+# - curl -X POST http://localhost:5000/initialize (API)
