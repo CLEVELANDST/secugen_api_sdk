@@ -458,3 +458,9 @@ driver-bloqueo-digital-huella/
 - 🐧 Optimizado para sistemas Linux (Ubuntu/Debian)
 - 🚀 Listo para producción con configuración robusta
 - 📊 Incluye herramientas de monitoreo y diagnóstico
+
+
+🚀 PRÓXIMOS PASOS
+Usar siempre: ./iniciar_sistema_robusto.sh
+Para migrar: ./configurar_nuevo_pc.sh
+Consultar: COMANDOS_MIGRACION_PC.md para referencia rápida
