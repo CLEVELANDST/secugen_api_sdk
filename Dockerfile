@@ -61,6 +61,10 @@ COPY sdk/ ./sdk/
 COPY lib/ ./lib/
 COPY python/ ./python/
 
+# Instalar librerías SecuGen en el sistema
+RUN cp lib/linux3/*.so /usr/lib/ && \
+    ldconfig
+
 # Configurar permisos para archivos ejecutables
 RUN chmod +x iniciar_sistema_robusto.sh parar_sistema.sh && \
     chmod +x reset_usb_device.py monitor_sistema_completo.py test_sistema_robusto.py && \
