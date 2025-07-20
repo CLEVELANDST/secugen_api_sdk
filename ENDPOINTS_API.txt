@@ -1,0 +1,306 @@
+===============================================================================
+                    API SECUGEN - ENDPOINTS FUNCIONALES
+===============================================================================
+
+BASE URL: http://localhost:5000
+PUERTO: 5000
+PROTOCOLO: HTTP/HTTPS
+
+===============================================================================
+                                ENDPOINTS
+===============================================================================
+
+1. INICIALIZAR DISPOSITIVO
+---------------------------
+URL: /initialize
+MÉTODO: POST
+DESCRIPCIÓN: Inicializa el lector de huellas SecuGen
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "message": "Dispositivo inicializado correctamente"
+}
+
+RESPUESTA CON ERROR:
+{
+    "success": false,
+    "error": "Error al inicializar: [descripción del error]"
+}
+
+EJEMPLO CURL:
+curl -X POST http://localhost:5000/initialize
+
+===============================================================================
+
+2. RESETEAR DISPOSITIVO USB
+---------------------------
+URL: /reset-usb
+MÉTODO: POST
+DESCRIPCIÓN: Resetea el dispositivo USB SecuGen cuando queda colgado
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "message": "Lector USB reseteado correctamente"
+}
+
+RESPUESTA CON ERROR:
+{
+    "success": false,
+    "error": "Permisos insuficientes para realizar unbind. Ejecute como root o configure reglas udev para el dispositivo SecuGen"
+}
+
+EJEMPLO CURL:
+curl -X POST http://localhost:5000/reset-usb
+
+===============================================================================
+
+3. CONTROLAR LED
+----------------
+URL: /led
+MÉTODO: POST
+DESCRIPCIÓN: Enciende o apaga el LED del lector de huellas
+
+PARÁMETROS JSON:
+{
+    "state": true/false
+}
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "message": "LED del lector encendido/apagado"
+}
+
+RESPUESTA CON ERROR:
+{
+    "success": false,
+    "error": "Error de acceso al dispositivo. Verifique: 1. El dispositivo está conectado 2. Las reglas udev están instaladas 3. El usuario tiene permisos suficientes"
+}
+
+EJEMPLO CURL:
+curl -X POST http://localhost:5000/led \
+  -H "Content-Type: application/json" \
+  -d '{"state": true}'
+
+===============================================================================
+
+4. CAPTURAR HUELLA
+-------------------
+URL: /capturar-huella
+MÉTODO: POST
+DESCRIPCIÓN: Captura una huella digital del sensor
+
+PARÁMETROS JSON:
+{
+    "save_image": false,        // Opcional: guardar imagen (default: false)
+    "create_template": false,   // Opcional: crear template (default: false)
+    "template_id": "user123"    // Opcional: ID para almacenar template
+}
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "data": {
+        "imagen": "base64_encoded_image_data",
+        "template": "base64_encoded_template_data",
+        "width": 258,
+        "height": 336,
+        "mensaje": "Huella capturada exitosamente",
+        "template_stored": "user123"
+    }
+}
+
+RESPUESTA CON ERROR:
+{
+    "error": "Error al capturar la huella: [descripción del error]"
+}
+
+EJEMPLO CURL:
+curl -X POST http://localhost:5000/capturar-huella \
+  -H "Content-Type: application/json" \
+  -d '{
+    "save_image": false,
+    "create_template": true,
+    "template_id": "usuario_001"
+  }'
+
+===============================================================================
+
+5. COMPARAR HUELLAS
+-------------------
+URL: /comparar-huellas
+MÉTODO: POST
+DESCRIPCIÓN: Compara dos templates de huellas digitales
+
+PARÁMETROS JSON:
+{
+    "template1_id": "user123",           // ID del template almacenado
+    "template2_id": "user456",           // ID del template almacenado
+    "template1_data": "base64_data",     // Template en base64 (alternativo)
+    "template2_data": "base64_data",     // Template en base64 (alternativo)
+    "security_level": 1                  // Nivel de seguridad (default: 1)
+}
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "matched": true,
+    "score": 100,
+    "message": "Comparación exitosa (simplificada)",
+    "comparison_info": {
+        "template1_source": "user123",
+        "template2_source": "user456",
+        "security_level": 1
+    }
+}
+
+RESPUESTA CON ERROR:
+{
+    "success": false,
+    "error": "No se proporcionó template1 válido"
+}
+
+EJEMPLO CURL:
+curl -X POST http://localhost:5000/comparar-huellas \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template1_id": "usuario_001",
+    "template2_id": "usuario_002",
+    "security_level": 1
+  }'
+
+===============================================================================
+
+6. LISTAR TEMPLATES
+-------------------
+URL: /templates
+MÉTODO: GET
+DESCRIPCIÓN: Lista todos los templates almacenados
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "templates": ["user123", "user456", "admin001"],
+    "count": 3
+}
+
+RESPUESTA CON ERROR:
+{
+    "error": "[descripción del error]"
+}
+
+EJEMPLO CURL:
+curl -X GET http://localhost:5000/templates
+
+===============================================================================
+
+7. ELIMINAR TEMPLATE
+--------------------
+URL: /templates/<template_id>
+MÉTODO: DELETE
+DESCRIPCIÓN: Elimina un template específico por ID
+
+RESPUESTA EXITOSA:
+{
+    "success": true,
+    "message": "Template user123 eliminado"
+}
+
+RESPUESTA CON ERROR:
+{
+    "success": false,
+    "error": "Template no encontrado"
+}
+
+EJEMPLO CURL:
+curl -X DELETE http://localhost:5000/templates/user123
+
+===============================================================================
+                                FLUJO DE USO TÍPICO
+===============================================================================
+
+1. INICIALIZAR:
+   POST /initialize
+
+2. CAPTURAR HUELLA DE REFERENCIA:
+   POST /capturar-huella
+   {
+     "create_template": true,
+     "template_id": "usuario_001"
+   }
+
+3. CAPTURAR HUELLA PARA COMPARAR:
+   POST /capturar-huella
+   {
+     "create_template": true,
+     "template_id": "usuario_002"
+   }
+
+4. COMPARAR HUELLAS:
+   POST /comparar-huellas
+   {
+     "template1_id": "usuario_001",
+     "template2_id": "usuario_002"
+   }
+
+5. SI EL DISPOSITIVO SE COLGA:
+   POST /reset-usb
+
+===============================================================================
+                                CÓDIGOS DE ERROR
+===============================================================================
+
+ERRORES COMUNES:
+- 500: Error interno del servidor
+- 404: Template no encontrado
+- 400: Datos JSON inválidos
+
+MENSAJES DE ERROR ESPECÍFICOS:
+- "Error de acceso al dispositivo": Verificar conexión USB y permisos
+- "Permisos insuficientes": Ejecutar como root o configurar reglas udev
+- "No se encontró dispositivo SecuGen": Verificar conexión del dispositivo
+- "Error al capturar la huella": Dispositivo en estado corrupto
+
+===============================================================================
+                                CONFIGURACIÓN
+===============================================================================
+
+REQUISITOS:
+- Python 3.6+
+- Flask
+- SDK SecuGen
+- Dispositivo SecuGen USB conectado
+- Permisos de root o reglas udev configuradas
+
+INICIAR SERVIDOR:
+python app.py
+
+PUERTO POR DEFECTO:
+5000
+
+HOST:
+0.0.0.0 (accesible desde cualquier IP)
+
+===============================================================================
+                                NOTAS IMPORTANTES
+===============================================================================
+
+1. El dispositivo debe estar conectado antes de inicializar
+2. Los templates se almacenan en memoria (se pierden al reiniciar)
+3. El endpoint /reset-usb requiere permisos de root
+4. La captura de huellas incluye recuperación automática
+5. Los templates se devuelven en formato base64
+6. El LED se enciende automáticamente durante la captura
+
+===============================================================================
+                                VERSIÓN
+===============================================================================
+
+API Version: 1.0
+SDK SecuGen: Compatible
+Última actualización: 2024
+Desarrollado para: Linux
+
+=============================================================================== 

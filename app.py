@@ -7,6 +7,8 @@ from ctypes import c_int, byref, c_long, c_ubyte, POINTER, c_bool
 import time
 import sys
 import os
+import subprocess
+import glob
 
 app = Flask(__name__)
 CORS(app)
@@ -23,6 +25,124 @@ class SecugenController:
         except Exception as e:
             self.init_error = str(e)
             print(f"Error al crear instancia de SecugenController: {e}")
+    
+    def find_secugen_device(self):
+        """Encuentra el dispositivo USB SecuGen dinámicamente"""
+        try:
+            # Buscar dispositivos USB con VendorID:ProductID de SecuGen (1162:0300)
+            print("Buscando dispositivo SecuGen USB...")
+            
+            # Método 1: Usar lsusb para encontrar el dispositivo
+            result = subprocess.run(['lsusb'], capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                raise Exception(f"Error ejecutando lsusb: {result.stderr}")
+            
+            secugen_lines = []
+            for line in result.stdout.split('\n'):
+                if '1162:0300' in line or 'SecuGen' in line:
+                    secugen_lines.append(line.strip())
+                    print(f"Dispositivo SecuGen encontrado: {line.strip()}")
+            
+            if not secugen_lines:
+                raise Exception("No se encontró dispositivo SecuGen USB")
+            
+            # Método 2: Buscar en /sys/bus/usb/devices/ para obtener el device_id
+            usb_devices = glob.glob('/sys/bus/usb/devices/*-*')
+            device_id = None
+            
+            for device_path in usb_devices:
+                try:
+                    # Leer idVendor e idProduct
+                    with open(f'{device_path}/idVendor', 'r') as f:
+                        vendor_id = f.read().strip()
+                    with open(f'{device_path}/idProduct', 'r') as f:
+                        product_id = f.read().strip()
+                    
+                    # Verificar si es el dispositivo SecuGen
+                    if vendor_id == '1162' and product_id == '0300':
+                        device_id = os.path.basename(device_path)
+                        print(f"Dispositivo SecuGen encontrado en: {device_id}")
+                        break
+                        
+                except (FileNotFoundError, PermissionError) as e:
+                    continue
+            
+            if not device_id:
+                raise Exception("No se pudo determinar el device_id del dispositivo SecuGen")
+            
+            return device_id
+            
+        except Exception as e:
+            print(f"Error en find_secugen_device: {str(e)}")
+            raise e
+    
+    def reset_usb_device(self):
+        """Resetea el dispositivo USB SecuGen mediante unbind/bind"""
+        try:
+            print("Iniciando reset del dispositivo USB SecuGen...")
+            
+            # Encontrar el dispositivo dinámicamente
+            device_id = self.find_secugen_device()
+            print(f"Device ID encontrado: {device_id}")
+            
+            # Cerrar el dispositivo SDK antes del reset
+            if self.initialized and self.sgfp:
+                print("Cerrando dispositivo SDK antes del reset USB...")
+                try:
+                    self.sgfp.CloseDevice()
+                    self.initialized = False
+                    print("Dispositivo SDK cerrado")
+                except Exception as e:
+                    print(f"Error al cerrar dispositivo SDK: {e}")
+            
+            # Realizar unbind del dispositivo
+            print(f"Realizando unbind del dispositivo {device_id}...")
+            unbind_path = f'/sys/bus/usb/drivers/usb/unbind'
+            
+            try:
+                with open(unbind_path, 'w') as f:
+                    f.write(device_id)
+                print("Unbind completado exitosamente")
+            except PermissionError:
+                raise Exception("Permisos insuficientes para realizar unbind. Ejecute como root o agregue reglas udev")
+            except Exception as e:
+                raise Exception(f"Error en unbind: {str(e)}")
+            
+            # Esperar 1 segundo
+            print("Esperando 1 segundo...")
+            time.sleep(1)
+            
+            # Realizar bind del dispositivo
+            print(f"Realizando bind del dispositivo {device_id}...")
+            bind_path = f'/sys/bus/usb/drivers/usb/bind'
+            
+            try:
+                with open(bind_path, 'w') as f:
+                    f.write(device_id)
+                print("Bind completado exitosamente")
+            except PermissionError:
+                raise Exception("Permisos insuficientes para realizar bind. Ejecute como root o agregue reglas udev")
+            except Exception as e:
+                raise Exception(f"Error en bind: {str(e)}")
+            
+            # Esperar un poco más para que el dispositivo se estabilice
+            print("Esperando estabilización del dispositivo...")
+            time.sleep(2)
+            
+            # Reinicializar el SDK después del reset
+            print("Reinicializando SDK después del reset USB...")
+            success = self.initializeDevice()
+            
+            if success:
+                print("Reset USB completado exitosamente")
+                return True
+            else:
+                print("Reset USB completado pero falló la reinicialización del SDK")
+                return False
+                
+        except Exception as e:
+            print(f"Error en reset_usb_device: {str(e)}")
+            raise e
     
     def initializeDevice(self):
         try:
@@ -60,6 +180,40 @@ class SecugenController:
         except Exception as e:
             self.init_error = str(e)
             print(f"Error en initializeDevice: {str(e)}")
+            return False
+    
+    def recover_if_needed(self):
+        """Cierra el dispositivo y lo reinicializa para recuperar de estados corruptos"""
+        try:
+            print("Iniciando proceso de recuperación del dispositivo...")
+            
+            # Cerrar el dispositivo si está inicializado
+            if self.initialized and self.sgfp:
+                print("Cerrando dispositivo...")
+                try:
+                    self.sgfp.CloseDevice()
+                    print("Dispositivo cerrado exitosamente")
+                except Exception as e:
+                    print(f"Error al cerrar dispositivo: {e}")
+            
+            # Marcar como no inicializado
+            self.initialized = False
+            self.init_error = None
+            
+            # Reinicializar el dispositivo
+            print("Reinicializando dispositivo...")
+            success = self.initializeDevice()
+            
+            if success:
+                print("Recuperación completada exitosamente")
+                return True
+            else:
+                print(f"Error en la recuperación: {self.init_error}")
+                return False
+                
+        except Exception as e:
+            print(f"Error en recover_if_needed: {str(e)}")
+            self.init_error = str(e)
             return False
     
     def led_control(self, state):
@@ -167,6 +321,41 @@ def initialize_device():
             "error": str(e)
         }), 500
 
+@app.route('/reset-usb', methods=['POST'])
+def reset_usb():
+    """Endpoint para resetear el dispositivo USB SecuGen"""
+    try:
+        print("Solicitud de reset USB recibida...")
+        
+        # Realizar el reset del dispositivo USB
+        success = controller.reset_usb_device()
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Lector USB reseteado correctamente"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Reset USB completado pero falló la reinicialización del SDK"
+            }), 500
+            
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error en reset_usb: {error_msg}")
+        
+        # Agregar información de diagnóstico para errores comunes
+        if "Permisos insuficientes" in error_msg:
+            error_msg += ". Solución: Ejecute la aplicación como root o configure reglas udev para el dispositivo SecuGen"
+        elif "No se encontró dispositivo SecuGen" in error_msg:
+            error_msg += ". Verifique que el dispositivo esté conectado y sea reconocido por el sistema"
+        
+        return jsonify({
+            "success": False,
+            "error": error_msg
+        }), 500
+
 @app.route('/led', methods=['POST'])
 def control_led():
     try:
@@ -245,6 +434,9 @@ def capturar_huella():
         controller.led_control(False)  # Apagar LED después de la captura
         
         if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+            print(f"Error al capturar la huella después de {max_attempts} intentos: {err}")
+            print("Iniciando proceso de recuperación del dispositivo...")
+            controller.recover_if_needed()
             raise Exception(f'Error al capturar la huella: {err}')
 
         # Convertir a base64

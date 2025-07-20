@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Crear grupo y usuario para SecuGen
+# Crear grupo y usuario para SecuGen (mantener para compatibilidad)
 RUN groupadd -r secugen && \
     groupmod -g 1001 plugdev && \
     useradd -r -g secugen -G plugdev,dialout secugen
@@ -34,7 +34,7 @@ WORKDIR /app
 RUN mkdir -p /usr/local/lib/python3.8/dist-packages/sgfplib
 
 # Copiar SDK y configurar
-COPY --chown=secugen:secugen sdk /usr/local/lib/python3.8/dist-packages/sgfplib/
+COPY sdk /usr/local/lib/python3.8/dist-packages/sgfplib/
 
 # Copiar todas las bibliotecas compartidas
 COPY lib/linux3/*.so /usr/local/lib/
@@ -51,11 +51,10 @@ RUN chmod 644 /etc/udev/rules.d/99SecuGen.rules && \
     chown root:root /etc/udev/rules.d/99SecuGen.rules
 
 # Copiar el resto de archivos
-COPY --chown=secugen:secugen . .
+COPY . .
 
 # Configurar permisos
 RUN mkdir -p /app/images && \
-    chown -R secugen:secugen /app && \
     chmod -R 755 /app && \
     chmod 777 /app/images && \
     chmod +x start.sh && \
@@ -70,8 +69,8 @@ RUN chmod -R 777 /usr/local/lib/*.so && \
     chown root:plugdev /dev/bus/usb/*/* || true && \
     ldconfig
 
-# Cambiar al usuario secugen
-USER secugen
+# EJECUTAR COMO ROOT para permitir operaciones USB
+# USER secugen  <- COMENTADO PARA EJECUTAR COMO ROOT
 
 EXPOSE 5000
 
