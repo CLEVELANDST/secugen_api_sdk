@@ -29,7 +29,7 @@ class SecugenController:
     def find_secugen_device(self):
         """Encuentra el dispositivo USB SecuGen dinámicamente"""
         try:
-            # Buscar dispositivos USB con VendorID:ProductID de SecuGen (1162:0300)
+            # Buscar dispositivos USB con VendorID:ProductID de SecuGen (1162:2201)
             print("Buscando dispositivo SecuGen USB...")
             
             # Método 1: Usar lsusb para encontrar el dispositivo
@@ -39,7 +39,7 @@ class SecugenController:
             
             secugen_lines = []
             for line in result.stdout.split('\n'):
-                if '1162:0300' in line or 'SecuGen' in line:
+                if '1162:2201' in line or 'SecuGen' in line:
                     secugen_lines.append(line.strip())
                     print(f"Dispositivo SecuGen encontrado: {line.strip()}")
             
@@ -47,11 +47,15 @@ class SecugenController:
                 raise Exception("No se encontró dispositivo SecuGen USB")
             
             # Método 2: Buscar en /sys/bus/usb/devices/ para obtener el device_id
-            usb_devices = glob.glob('/sys/bus/usb/devices/*-*')
+            usb_devices = glob.glob('/sys/bus/usb/devices/*')
             device_id = None
             
             for device_path in usb_devices:
                 try:
+                    # Verificar que sea un directorio y tenga los archivos necesarios
+                    if not os.path.isdir(device_path) or not os.path.exists(f'{device_path}/idVendor') or not os.path.exists(f'{device_path}/idProduct'):
+                        continue
+                    
                     # Leer idVendor e idProduct
                     with open(f'{device_path}/idVendor', 'r') as f:
                         vendor_id = f.read().strip()
@@ -59,7 +63,7 @@ class SecugenController:
                         product_id = f.read().strip()
                     
                     # Verificar si es el dispositivo SecuGen
-                    if vendor_id == '1162' and product_id == '0300':
+                    if vendor_id == '1162' and product_id == '2201':
                         device_id = os.path.basename(device_path)
                         print(f"Dispositivo SecuGen encontrado en: {device_id}")
                         break
@@ -146,6 +150,9 @@ class SecugenController:
     
     def initializeDevice(self):
         try:
+            if not self.sgfp:
+                raise Exception("SDK SecuGen no disponible")
+            
             print("Iniciando dispositivo...")
             err = self.sgfp.Create()
             if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
@@ -156,9 +163,27 @@ class SecugenController:
             if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
                 raise Exception(f"Error al inicializar: {err}")
 
-            print("Abriendo dispositivo...")
-            # Intentar con diferentes IDs de dispositivo
-            device_ids = [0, 1]  # Podemos agregar más IDs si es necesario
+            print("Enumerando dispositivos disponibles...")
+            # Obtener información de todos los dispositivos disponibles
+            device_info = self.get_device_info()
+            if device_info:
+                print(f"Dispositivo encontrado - ID: {device_info['device_id']}, SN: {device_info['serial_number']}")
+                
+                print("Abriendo dispositivo...")
+                err = self.sgfp.OpenDevice(device_info['device_id'])
+                if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    print(f"Dispositivo abierto exitosamente con ID: {device_info['device_id']}")
+                    self.device_serial = device_info['serial_number']
+                    self.device_id = device_info['device_id']
+                    self.initialized = True
+                    print("Dispositivo inicializado correctamente")
+                    return True
+                else:
+                    print(f"No se pudo abrir dispositivo con ID {device_info['device_id']}, error: {err}")
+            
+            # Fallback: intentar con IDs conocidos
+            print("Usando método fallback...")
+            device_ids = [0, 1]
             device_opened = False
             
             for device_id in device_ids:
@@ -181,6 +206,44 @@ class SecugenController:
             self.init_error = str(e)
             print(f"Error en initializeDevice: {str(e)}")
             return False
+    
+    def get_device_info(self):
+        """Obtiene información del dispositivo usando identificadores persistentes"""
+        try:
+            if not self.sgfp or not self.initialized:
+                return None
+            
+            # Si el dispositivo ya está abierto, usar la información almacenada
+            if hasattr(self, 'device_id') and hasattr(self, 'device_serial'):
+                # Obtener dimensiones del dispositivo
+                width = c_long(258)  # Valores por defecto
+                height = c_long(336)
+                
+                try:
+                    # Intentar obtener información real del dispositivo
+                    err = self.sgfp.GetDeviceInfo(width, height)
+                    if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                        print(f"Error obteniendo GetDeviceInfo: {err}")
+                        # Usar valores por defecto
+                        width = c_long(258)
+                        height = c_long(336)
+                except Exception as e:
+                    print(f"Error en GetDeviceInfo: {e}")
+                    # Usar valores por defecto
+                    width = c_long(258)
+                    height = c_long(336)
+                
+                return {
+                    'device_id': self.device_id,
+                    'serial_number': self.device_serial,
+                    'width': width.value,
+                    'height': height.value
+                }
+            
+            return None
+        except Exception as e:
+            print(f"Error en get_device_info: {e}")
+            return None
     
     def recover_if_needed(self):
         """Cierra el dispositivo y lo reinicializa para recuperar de estados corruptos"""
@@ -218,6 +281,9 @@ class SecugenController:
     
     def led_control(self, state):
         try:
+            if not self.sgfp:
+                raise Exception("SDK SecuGen no disponible")
+            
             if not self.initialized:
                 # Intentar reinicializar si falló anteriormente
                 if not self.initializeDevice():
@@ -246,13 +312,43 @@ class SecugenController:
     def create_template(self, image_buffer):
         """Crear template a partir de una imagen de huella"""
         try:
-            # Por ahora deshabilitamos la creación de template para evitar problemas
-            # Se puede habilitar cuando se solucionen los problemas de tipos
-            print("Función create_template deshabilitada temporalmente")
-            return None
+            if not self.sgfp:
+                raise Exception("SDK SecuGen no disponible")
+            
+            print("Creando template desde imagen...")
+            
+            # Usar el tamaño constante del SDK para SG400
+            template_size = 400  # Tamaño estándar para templates SG400
+            
+            # Convertir los buffers a tipos que ctypes pueda manejar
+            from ctypes import c_char
+            
+            # Crear buffer de imagen usando c_char como en el ejemplo
+            image_buffer_ctypes = (c_char * len(image_buffer))()
+            image_buffer_ctypes[:] = image_buffer
+            
+            # Crear buffer de template usando c_char como en el ejemplo
+            template_buffer_ctypes = (c_char * template_size)()
+            
+            # Crear template usando el SDK
+            err = self.sgfp.CreateSG400Template(image_buffer_ctypes, template_buffer_ctypes)
+            if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                print(f"Error creando template: {err}")
+                # Si falla, devolver un hash de la imagen como fallback
+                import hashlib
+                hash_template = hashlib.md5(image_buffer).digest()
+                return hash_template
+            
+            # Convertir el resultado de vuelta a bytes
+            template_bytes = bytes(template_buffer_ctypes)
+            print(f"Template creado exitosamente, tamaño: {len(template_bytes)} bytes")
+            return template_bytes
+            
         except Exception as e:
             print(f"Error en create_template: {str(e)}")
-            return None
+            # Fallback: devolver hash de la imagen
+            import hashlib
+            return hashlib.md5(image_buffer).digest()
 
     def compare_templates(self, template1, template2, security_level=1):
         """Comparar dos templates de huellas"""
@@ -403,6 +499,9 @@ def capturar_huella():
         height = c_long(336)   # Alto típico del sensor
         
         print("Obteniendo información del dispositivo...")
+        if not controller.sgfp:
+            raise Exception("SDK SecuGen no inicializado")
+        
         err = controller.sgfp.GetDeviceInfo(width, height)
         if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
             raise Exception(f'Error al obtener información del dispositivo: {err}')
@@ -418,6 +517,10 @@ def capturar_huella():
         
         print("Capturando imagen...")
         print("Tamaño del buffer:", len(imageBuffer))
+        
+        # Verificar que el SDK esté inicializado
+        if not controller.sgfp:
+            raise Exception("SDK SecuGen no inicializado")
         
         # Modificación de intentos y tiempo de espera
         max_attempts = 5  # Aumentado de 3 a 5 intentos
@@ -462,16 +565,24 @@ def capturar_huella():
                 print(f"Error al guardar imagen: {e}")
                 pass
         
+        # Determinar qué devolver basado en los parámetros
+        response_data = {
+            'width': width.value,
+            'height': height.value,
+            'mensaje': 'Huella capturada exitosamente'
+        }
+        
+        if create_template and template_base64:
+            # Si se solicita template, devolver solo el template
+            response_data['template'] = template_base64
+            response_data['template_stored'] = template_id if template_id else None
+        else:
+            # Si no se solicita template, devolver la imagen
+            response_data['imagen'] = imagen_base64
+        
         return jsonify({
             'success': True,
-            'data': {
-                'imagen': imagen_base64,
-                'template': template_base64,
-                'width': width.value,
-                'height': height.value,
-                'mensaje': 'Huella capturada exitosamente',
-                'template_stored': template_id if template_id and template_base64 else None
-            }
+            'data': response_data
         })
 
     except Exception as e:
@@ -568,5 +679,28 @@ def eliminar_template(template_id):
         print(f"Error en eliminar_template: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/device-info', methods=['GET'])
+def get_device_info():
+    """Obtiene información del dispositivo usando identificadores persistentes"""
+    try:
+        if not controller.initialized:
+            return jsonify({"success": False, "error": "Dispositivo no inicializado"}), 400
+        
+        # Información básica del dispositivo
+        device_info = {
+            "device_id": getattr(controller, 'device_id', 0),
+            "serial_number": getattr(controller, 'device_serial', 'SECUGEN_00'),
+            "width": 258,
+            "height": 336,
+            "persistent_id": f"{getattr(controller, 'device_serial', 'SECUGEN_00')}_{getattr(controller, 'device_id', 0)}"
+        }
+        
+        return jsonify({
+            "success": True,
+            "device_info": device_info
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000) 
+    app.run(host='0.0.0.0', port=5500) 

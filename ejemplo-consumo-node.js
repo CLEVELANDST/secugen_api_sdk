@@ -2,7 +2,7 @@ const axios = require('axios');
 
 async function capturarHuella() {
     try {
-        const response = await axios.post('http://localhost:5000/capturar-huella');
+        const response = await axios.post('http://localhost:5500/capturar-huella');
         const { data } = response;
         
         if (data.success) {

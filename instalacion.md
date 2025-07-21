@@ -192,13 +192,13 @@ nohup python3 app.py > app.log 2>&1 &
 
 ```bash
 # Verificar que el servidor está ejecutándose
-curl http://localhost:5000
+curl http://localhost:5500
 ```
 
 ### 2. Probar inicialización del dispositivo
 
 ```bash
-curl -X POST -H "Content-Type: application/json" http://localhost:5000/initialize
+curl -X POST -H "Content-Type: application/json" http://localhost:5500/initialize
 ```
 
 **Respuesta exitosa:**
@@ -213,10 +213,10 @@ curl -X POST -H "Content-Type: application/json" http://localhost:5000/initializ
 
 ```bash
 # Encender LED
-curl -X POST -H "Content-Type: application/json" -d '{"state": true}' http://localhost:5000/led
+curl -X POST -H "Content-Type: application/json" -d '{"state": true}' http://localhost:5500/led
 
 # Apagar LED
-curl -X POST -H "Content-Type: application/json" -d '{"state": false}' http://localhost:5000/led
+curl -X POST -H "Content-Type: application/json" -d '{"state": false}' http://localhost:5500/led
 ```
 
 **Respuesta exitosa:**
@@ -231,10 +231,10 @@ curl -X POST -H "Content-Type: application/json" -d '{"state": false}' http://lo
 
 ```bash
 # Capturar huella sin guardar imagen
-curl -X POST -H "Content-Type: application/json" -d '{"save_image": false}' http://localhost:5000/capturar-huella
+curl -X POST -H "Content-Type: application/json" -d '{"save_image": false}' http://localhost:5500/capturar-huella
 
 # Capturar huella y guardar imagen
-curl -X POST -H "Content-Type: application/json" -d '{"save_image": true}' http://localhost:5000/capturar-huella
+curl -X POST -H "Content-Type: application/json" -d '{"save_image": true}' http://localhost:5500/capturar-huella
 ```
 
 **Respuesta exitosa:**
@@ -338,13 +338,13 @@ echo "🔍 Verificando dispositivo USB..."
 lsusb | grep -i secugen
 
 echo "🔍 Probando inicialización..."
-curl -X POST -H "Content-Type: application/json" http://localhost:5000/initialize
+curl -X POST -H "Content-Type: application/json" http://localhost:5500/initialize
 
 echo "🔍 Probando LED..."
-curl -X POST -H "Content-Type: application/json" -d '{"state": true}' http://localhost:5000/led
+curl -X POST -H "Content-Type: application/json" -d '{"state": true}' http://localhost:5500/led
 
 echo "🔍 Probando captura..."
-curl -X POST -H "Content-Type: application/json" -d '{"save_image": false}' http://localhost:5000/capturar-huella
+curl -X POST -H "Content-Type: application/json" -d '{"save_image": false}' http://localhost:5500/capturar-huella
 ```
 
 ---
@@ -397,7 +397,7 @@ groups
 
 Al completar esta instalación, deberías tener:
 
-✅ **Aplicación Flask** ejecutándose en `http://localhost:5000`  
+✅ **Aplicación Flask** ejecutándose en `http://localhost:5500`  
 ✅ **Dispositivo SecuGen** completamente funcional  
 ✅ **Control del LED** operativo  
 ✅ **Captura de huellas** funcionando  

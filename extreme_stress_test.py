@@ -13,7 +13,7 @@ from datetime import datetime
 import concurrent.futures
 
 class ExtremeStressTest:
-    def __init__(self, base_url="http://localhost:5000"):
+    def __init__(self, base_url="http://localhost:5500"):
         self.base_url = base_url
         self.session = requests.Session()
         self.session.timeout = 15

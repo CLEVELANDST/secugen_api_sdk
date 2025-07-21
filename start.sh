@@ -47,7 +47,7 @@ check_requirements() {
 
 # Iniciar la aplicación
 start_application() {
-    log "Iniciando aplicación Flask..."
+    log "Iniciando aplicación Flask en puerto 5500..."
     exec python3 app.py
 }
 

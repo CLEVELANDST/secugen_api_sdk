@@ -125,7 +125,7 @@ python3 extreme_stress_test.py
 ### Opción 1: Prueba Rápida (Recomendada)
 ```bash
 # Verificar que la API esté corriendo
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 
 # Ejecutar prueba simple
 python3 simple_stress_test.py
@@ -165,7 +165,7 @@ python3 extreme_stress_test.py
 
 ### Verificar API:
 ```bash
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 ```
 
 ### Verificar Dispositivo:

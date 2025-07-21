@@ -4,7 +4,7 @@ echo "🧪 PRUEBA DE RESET USB - API SECUGEN"
 echo "====================================="
 
 # URL base de la API
-API_URL="http://localhost:5000"
+API_URL="http://localhost:5500"
 
 # Función para hacer requests
 make_request() {
@@ -70,4 +70,4 @@ echo ""
 echo "✅ Prueba completada"
 echo ""
 echo "💡 Para usar el reset USB desde curl:"
-echo "curl -X POST http://localhost:5000/reset-usb" 
+echo "curl -X POST http://localhost:5500/reset-usb" 

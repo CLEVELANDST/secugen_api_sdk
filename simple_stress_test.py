@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 
 class SimpleStressTest:
-    def __init__(self, base_url="http://localhost:5000"):
+    def __init__(self, base_url="http://localhost:5500"):
         self.base_url = base_url
         self.session = requests.Session()
         self.session.timeout = 10

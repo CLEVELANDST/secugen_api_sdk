@@ -11,7 +11,7 @@ services:
       - "/sys/bus/usb:/sys/bus/usb"
       - "./images:/app/images"
     ports:
-      - "5000:5000"
+      - "5500:5500"
     environment:
       - LD_LIBRARY_PATH=/usr/local/lib
     restart: unless-stopped

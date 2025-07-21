@@ -227,7 +227,7 @@ ls -la app.py
 #### **3. API No Responde**
 ```bash
 # Probar endpoint
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 
 # Verificar proceso
 ps aux | grep python3
@@ -255,7 +255,7 @@ sudo systemctl restart secugen-fingerprint-api
 - [ ] Sesión reiniciada para aplicar cambios de grupo
 - [ ] Aplicación iniciada con `./start_production.sh`
 - [ ] Estado verificado con `./status_production.sh`
-- [ ] API responde: `curl -X POST http://localhost:5000/initialize`
+- [ ] API responde: `curl -X POST http://localhost:5500/initialize`
 - [ ] Dispositivo USB detectado: `lsusb | grep -i secugen`
 - [ ] Servicio systemd habilitado: `sudo systemctl is-enabled secugen-fingerprint-api`
 
@@ -312,7 +312,7 @@ logout && login
 ./status_production.sh
 
 # 5. Probar API
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 ```
 
 ¡Tu sistema está listo para producción! 🎉 

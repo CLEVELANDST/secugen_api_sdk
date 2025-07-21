@@ -8,7 +8,7 @@ import time
 import json
 
 def test_api():
-    base_url = "http://localhost:5000"
+    base_url = "http://localhost:5500"
     
     print("🧪 PRUEBA RÁPIDA - API DE HUELLAS DIGITALES")
     print("=" * 50)

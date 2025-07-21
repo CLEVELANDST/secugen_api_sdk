@@ -15,7 +15,7 @@ import argparse
 import sys
 
 class FingerprintStressTest:
-    def __init__(self, base_url="http://localhost:5000"):
+    def __init__(self, base_url="http://localhost:5500"):
         self.base_url = base_url
         self.session = requests.Session()
         self.results = []
@@ -293,7 +293,7 @@ class FingerprintStressTest:
 
 def main():
     parser = argparse.ArgumentParser(description='Stress Test para API de Huellas Digitales')
-    parser.add_argument('--url', default='http://localhost:5000', help='URL base de la API')
+    parser.add_argument('--url', default='http://localhost:5500', help='URL base de la API')
     parser.add_argument('--concurrent-tests', type=int, default=100, help='Número de pruebas concurrentes')
     parser.add_argument('--sequential-tests', type=int, default=50, help='Número de pruebas secuenciales')
     parser.add_argument('--threads', type=int, default=10, help='Número de threads para pruebas concurrentes')

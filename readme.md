@@ -86,7 +86,7 @@ cd driver-bloqueo-digital-huella
 ./status_production.sh
 
 # Probar la API
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 ```
 
 ## 🛠️ Instalación Manual (Avanzada)
@@ -118,32 +118,32 @@ sudo systemctl enable secugen-fingerprint-api    # Auto-inicio
 
 ### 1. Inicializar Dispositivo
 ```bash
-curl -X POST http://localhost:5000/initialize
+curl -X POST http://localhost:5500/initialize
 ```
 
 ### 2. Control del LED
 ```bash
 # Encender LED
-curl -X POST http://localhost:5000/led \
+curl -X POST http://localhost:5500/led \
 -H "Content-Type: application/json" \
 -d '{"state": true}'
 
 # Apagar LED
-curl -X POST http://localhost:5000/led \
+curl -X POST http://localhost:5500/led \
 -H "Content-Type: application/json" \
 -d '{"state": false}'
 ```
 
 ### 3. Capturar Huella
 ```bash
-curl -X POST http://localhost:5000/capturar-huella \
+curl -X POST http://localhost:5500/capturar-huella \
 -H "Content-Type: application/json" \
 -d '{"save_image": false, "create_template": true, "template_id": "user_001"}'
 ```
 
 ### 4. Comparar Huellas
 ```bash
-curl -X POST http://localhost:5000/comparar-huellas \
+curl -X POST http://localhost:5500/comparar-huellas \
 -H "Content-Type: application/json" \
 -d '{"template1_id": "user_001", "template2_id": "user_002", "security_level": 1}'
 ```
@@ -151,10 +151,10 @@ curl -X POST http://localhost:5000/comparar-huellas \
 ### 5. Gestión de Templates
 ```bash
 # Listar templates
-curl -X GET http://localhost:5000/templates
+curl -X GET http://localhost:5500/templates
 
 # Eliminar template
-curl -X DELETE http://localhost:5000/templates/user_001
+curl -X DELETE http://localhost:5500/templates/user_001
 ```
 
 **Para más ejemplos, consulta: [comandos_curl.md](./comandos_curl.md)**
