@@ -17,6 +17,11 @@ class SecugenController:
         self.initialized = False
         self.init_error = None
         self.stored_templates = {}  # Para almacenar templates de referencia
+        self.device_opened = False
+        self.current_device_id = None
+        self.recovery_attempts = 0
+        self.max_recovery_attempts = 3
+        self.last_error_time = None
         try:
             self.sgfp = PYSGFPLib()
             self.initializeDevice()
@@ -24,6 +29,58 @@ class SecugenController:
             self.init_error = str(e)
             print(f"Error al crear instancia de SecugenController: {e}")
     
+    def auto_recovery(self):
+        """Intenta recuperación automática del dispositivo"""
+        import time
+        
+        current_time = time.time()
+        
+        # Evitar intentos de recuperación muy frecuentes
+        if self.last_error_time and (current_time - self.last_error_time) < 5:
+            print("Esperando antes del siguiente intento de recuperación...")
+            return False
+        
+        if self.recovery_attempts >= self.max_recovery_attempts:
+            print(f"Máximo de intentos de recuperación alcanzado ({self.max_recovery_attempts})")
+            return False
+        
+        self.recovery_attempts += 1
+        self.last_error_time = current_time
+        
+        print(f"=== INTENTO DE RECUPERACIÓN AUTOMÁTICA #{self.recovery_attempts} ===")
+        
+        try:
+            # 1. Cerrar dispositivo si está abierto
+            try:
+                if self.sgfp:
+                    print("Cerrando dispositivo actual...")
+                    self.sgfp.CloseDevice()
+            except:
+                pass
+            
+            # 2. Reset del estado
+            self.initialized = False
+            self.device_opened = False
+            
+            # 3. Pausa corta
+            time.sleep(2)
+            
+            # 4. Reintentar inicialización
+            print("Reintentando inicialización...")
+            result = self.initializeDevice()
+            
+            if result:
+                print("=== RECUPERACIÓN AUTOMÁTICA EXITOSA ===")
+                self.recovery_attempts = 0  # Reset counter on success
+                return True
+            else:
+                print(f"=== RECUPERACIÓN AUTOMÁTICA FALLÓ ===")
+                return False
+                
+        except Exception as e:
+            print(f"Error durante recuperación automática: {e}")
+            return False
+
     def initializeDevice(self):
         try:
             print("Iniciando dispositivo...")
@@ -82,6 +139,16 @@ class SecugenController:
                     5: "Error al abrir el dispositivo"
                 }.get(result, f"Error desconocido: {result}")
                 
+                # Intentar recuperación automática si es error de acceso
+                if result == 2:  # Error de acceso al dispositivo
+                    print("Detectado error de acceso, intentando recuperación automática...")
+                    if self.auto_recovery():
+                        # Reintentar la operación después de la recuperación
+                        print("Reintentando operación LED después de recuperación...")
+                        retry_result = self.sgfp.SetLedOn(state)
+                        if retry_result == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                            return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'} (tras recuperación)"}
+                
                 raise Exception(f"Error al controlar LED: {error_msg}")
             
             return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'}"}
@@ -92,37 +159,100 @@ class SecugenController:
     def create_template(self, image_buffer):
         """Crear template a partir de una imagen de huella"""
         try:
-            # Por ahora deshabilitamos la creación de template para evitar problemas
-            # Se puede habilitar cuando se solucionen los problemas de tipos
-            print("Función create_template deshabilitada temporalmente")
-            return None
+            if not self.initialized:
+                print("Dispositivo no inicializado")
+                return None
+            
+            from ctypes import c_char
+            
+            # Crear buffer para el template (SG400 template size = 400 bytes)
+            template_buffer = (c_char * self.sgfp.constant_sg400_template_size)()
+            
+            # Convertir image_buffer a formato ctypes si es necesario
+            if isinstance(image_buffer, bytearray):
+                image_data = (c_char * len(image_buffer)).from_buffer(image_buffer)
+            else:
+                image_data = image_buffer
+            
+            print("Creando template desde imagen...")
+            result = self.sgfp.CreateSG400Template(image_data, template_buffer)
+            
+            if result != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                print(f"Error al crear template: {result}")
+                return None
+            
+            print("Template creado exitosamente")
+            return bytearray(template_buffer)
+            
         except Exception as e:
             print(f"Error en create_template: {str(e)}")
             return None
 
-    def compare_templates(self, template1, template2, security_level=1):
-        """Comparar dos templates de huellas"""
+    def compare_templates(self, template1, template2, security_level=5):
+        """Comparar dos templates de huellas usando el SDK de SecuGen"""
         try:
-            # Función simplificada para evitar problemas con ctypes
-            # Simulamos una comparación básica basada en el contenido
-            import hashlib
+            if not self.initialized:
+                print("Dispositivo no inicializado")
+                return {'success': False, 'error': 'Dispositivo no inicializado'}
             
-            # Crear hashes de los templates para comparación
-            hash1 = hashlib.md5(template1 if isinstance(template1, bytes) else bytes(template1)).hexdigest()
-            hash2 = hashlib.md5(template2 if isinstance(template2, bytes) else bytes(template2)).hexdigest()
+            from ctypes import c_char, c_bool, c_int, byref
+            from sdk.sgfdxsecuritylevel import SGFDxSecurityLevel
             
-            # Comparación simple: exactamente iguales
-            matched = hash1 == hash2
+            # Convertir templates a formato ctypes
+            template1_buffer = (c_char * self.sgfp.constant_sg400_template_size)()
+            template2_buffer = (c_char * self.sgfp.constant_sg400_template_size)()
             
-            # Simulamos un score básico
-            score = 100 if matched else 0
+            # Copiar los datos de los templates
+            if isinstance(template1, bytearray):
+                for i, byte in enumerate(template1[:self.sgfp.constant_sg400_template_size]):
+                    template1_buffer[i] = byte
+            else:
+                template1_bytes = bytes(template1)
+                for i, byte in enumerate(template1_bytes[:self.sgfp.constant_sg400_template_size]):
+                    template1_buffer[i] = byte
+            
+            if isinstance(template2, bytearray):
+                for i, byte in enumerate(template2[:self.sgfp.constant_sg400_template_size]):
+                    template2_buffer[i] = byte
+            else:
+                template2_bytes = bytes(template2)
+                for i, byte in enumerate(template2_bytes[:self.sgfp.constant_sg400_template_size]):
+                    template2_buffer[i] = byte
+            
+            # Realizar la comparación usando el SDK
+            matched = c_bool(False)
+            print(f"Comparando templates con nivel de seguridad: {security_level}")
+            
+            result = self.sgfp.MatchTemplate(
+                template1_buffer, 
+                template2_buffer, 
+                security_level, 
+                byref(matched)
+            )
+            
+            if result != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                print(f"Error en MatchTemplate: {result}")
+                return {'success': False, 'error': f'Error en comparación: {result}'}
+            
+            # Obtener el score de matching
+            score = c_int(0)
+            score_result = self.sgfp.GetMatchingScore(
+                template1_buffer,
+                template2_buffer, 
+                byref(score)
+            )
+            
+            final_score = score.value if score_result == SGFDxErrorCode.SGFDX_ERROR_NONE else 0
+            
+            print(f"Resultado de comparación: {'MATCH' if matched.value else 'NO MATCH'}, Score: {final_score}")
             
             return {
                 'success': True,
-                'matched': matched,
-                'score': score,
-                'message': 'Comparación exitosa (simplificada)'
+                'matched': bool(matched.value),
+                'score': final_score,
+                'message': f'Comparación exitosa usando SDK SecuGen'
             }
+            
         except Exception as e:
             print(f"Error en compare_templates: {str(e)}")
             return {'success': False, 'error': str(e)}
@@ -213,53 +343,127 @@ def capturar_huella():
         width = c_long(258)    # Ancho típico del sensor
         height = c_long(336)   # Alto típico del sensor
         
+        # Verificar estado del dispositivo antes de continuar
+        if not controller.initialized:
+            print("Dispositivo no inicializado, intentando recuperación...")
+            if not controller.auto_recovery():
+                raise Exception("No se pudo inicializar el dispositivo tras múltiples intentos")
+        
         print("Obteniendo información del dispositivo...")
         err = controller.sgfp.GetDeviceInfo(width, height)
         if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
-            raise Exception(f'Error al obtener información del dispositivo: {err}')
+            # Intentar recuperación automática si falla GetDeviceInfo
+            print(f"Error al obtener info del dispositivo: {err}, intentando recuperación...")
+            if controller.auto_recovery():
+                # Reintentar después de recuperación
+                err = controller.sgfp.GetDeviceInfo(width, height)
+                if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    raise Exception(f'Error al obtener información del dispositivo tras recuperación: {err}')
+            else:
+                raise Exception(f'Error al obtener información del dispositivo: {err}')
         
         print(f"Dimensiones del sensor: {width.value}x{height.value}")
         
-        # Crear buffer del tamaño correcto
+        # Validar dimensiones antes de crear buffer (SEGURIDAD)
+        if width.value <= 0 or height.value <= 0 or width.value > 1000 or height.value > 1000:
+            raise Exception(f"Dimensiones del sensor inválidas: {width.value}x{height.value}")
+        
+        # Crear buffer del tamaño correcto con protección
         buffer_size = width.value * height.value
-        imageBuffer = bytearray(buffer_size)
+        if buffer_size > 1000000:  # Máximo 1MB de buffer
+            raise Exception(f"Buffer de imagen demasiado grande: {buffer_size} bytes")
+        
+        try:
+            imageBuffer = bytearray(buffer_size)
+        except MemoryError:
+            raise Exception(f"No se pudo asignar memoria para buffer de {buffer_size} bytes")
         
         print("Encendiendo LED...")
-        controller.led_control(True)  # Encender LED
+        led_result = controller.led_control(True)  # Encender LED
+        
+        if not led_result.get('success', False):
+            print(f"Advertencia: No se pudo encender LED: {led_result.get('error')}")
+            # Continuar sin LED si es necesario
         
         print("Capturando imagen...")
         print("Tamaño del buffer:", len(imageBuffer))
         
-        # Modificación de intentos y tiempo de espera
-        max_attempts = 5  # Aumentado de 3 a 5 intentos
-        wait_time = 3    # Aumentado de 1 a 3 segundos
+        # Modificación de intentos y tiempo de espera con timeout total
+        max_attempts = 3  # Reducido para evitar bloqueos largos
+        wait_time = 1    # Reducido a 1 segundo
+        total_timeout = 10  # Máximo 10 segundos total
+        start_time = time.time()
         
+        capture_success = False
         for attempt in range(max_attempts):
             print(f"Intento {attempt + 1} de {max_attempts}")
-            err = controller.sgfp.GetImage(imageBuffer)
-            if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
+            
+            # Verificar timeout total
+            if (time.time() - start_time) > total_timeout:
+                print("Timeout total alcanzado, abortando captura")
                 break
-            time.sleep(wait_time)  # Espera 3 segundos entre intentos
+            
+            try:
+                err = controller.sgfp.GetImage(imageBuffer)
+                if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    capture_success = True
+                    break
+                elif err == 2:  # Error de acceso al dispositivo
+                    print("Error de acceso detectado, intentando recuperación...")
+                    if controller.auto_recovery():
+                        print("Recuperación exitosa, reintentando captura...")
+                        continue
+                    else:
+                        print("Recuperación falló")
+                        break
+                else:
+                    print(f"Error en captura: {err}")
+            except Exception as capture_error:
+                print(f"Excepción durante captura: {capture_error}")
+                break
+            
+            if attempt < max_attempts - 1:  # No esperar después del último intento
+                time.sleep(wait_time)
         
+        # Siempre intentar apagar LED, incluso si hay errores
         print("Apagando LED...")
-        controller.led_control(False)  # Apagar LED después de la captura
+        try:
+            controller.led_control(False)
+        except Exception as led_error:
+            print(f"Error al apagar LED: {led_error}")
+            # No es crítico si no se puede apagar el LED
         
-        if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
-            raise Exception(f'Error al capturar la huella: {err}')
+        if not capture_success:
+            raise Exception(f'Error al capturar la huella tras {max_attempts} intentos. Último error: {err if "err" in locals() else "Timeout o error desconocido"}')
 
         # Convertir a base64
         imagen_base64 = base64.b64encode(bytes(imageBuffer)).decode('utf-8')
         
-        # Crear template si se solicita
+        # Crear template si se solicita (con manejo de errores mejorado)
         template_base64 = None
+        template_created = False
         if create_template:
-            template_data = controller.create_template(imageBuffer)
-            if template_data:
-                template_base64 = base64.b64encode(bytes(template_data)).decode('utf-8')
-                
-                # Almacenar template si se proporciona ID
-                if template_id:
-                    controller.store_template(template_id, template_data)
+            try:
+                print("Iniciando creación de template...")
+                template_data = controller.create_template(imageBuffer)
+                if template_data and len(template_data) > 0:
+                    template_base64 = base64.b64encode(bytes(template_data)).decode('utf-8')
+                    template_created = True
+                    print(f"Template creado exitosamente, tamaño: {len(template_data)} bytes")
+                    
+                    # Almacenar template si se proporciona ID
+                    if template_id:
+                        try:
+                            store_result = controller.store_template(template_id, template_data)
+                            print(f"Template almacenado con ID {template_id}: {store_result}")
+                        except Exception as store_error:
+                            print(f"Advertencia: Error al almacenar template: {store_error}")
+                            # No es crítico si no se puede almacenar
+                else:
+                    print("Advertencia: No se pudo crear template válido")
+            except Exception as template_error:
+                print(f"Advertencia: Error en creación de template: {template_error}")
+                # No lanzar excepción, solo continuar sin template
         
         # Guardar la imagen solo si se solicita
         if save_image:
@@ -275,21 +479,39 @@ def capturar_huella():
             'data': {
                 'imagen': imagen_base64,
                 'template': template_base64,
+                'template_created': template_created,
                 'width': width.value,
                 'height': height.value,
+                'buffer_size': buffer_size,
                 'mensaje': 'Huella capturada exitosamente',
-                'template_stored': template_id if template_id and template_base64 else None
+                'template_stored': template_id if template_id and template_created else None,
+                'capture_attempts': max_attempts,
+                'device_status': 'responsive'
             }
         })
 
     except Exception as e:
         # Asegurarse de apagar el LED en caso de error
         try:
+            print("Apagando LED tras error...")
             controller.led_control(False)
-        except:
+        except Exception as led_cleanup_error:
+            print(f"Error al apagar LED durante limpieza: {led_cleanup_error}")
             pass
-        print(f"Error en capturar_huella: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        
+        error_msg = str(e)
+        print(f"Error en capturar_huella: {error_msg}")
+        
+        # Agregar información de diagnóstico
+        diagnostic_info = {
+            'error': error_msg,
+            'device_initialized': controller.initialized,
+            'recovery_attempts': getattr(controller, 'recovery_attempts', 0),
+            'timestamp': time.time(),
+            'suggestion': 'Verifique la conexión del dispositivo y reinicie si persiste el error'
+        }
+        
+        return jsonify(diagnostic_info), 500
 
 @app.route('/comparar-huellas', methods=['POST'])
 def comparar_huellas():
@@ -303,7 +525,7 @@ def comparar_huellas():
         template2_id = data.get('template2_id')
         template1_data = data.get('template1_data')  # Base64
         template2_data = data.get('template2_data')  # Base64
-        security_level = data.get('security_level', 1)  # Nivel de seguridad por defecto
+        security_level = data.get('security_level', 5)  # SL_NORMAL por defecto
         
         # Obtener templates para comparar
         if template1_id and template1_id in controller.stored_templates:
@@ -375,6 +597,171 @@ def eliminar_template(template_id):
     except Exception as e:
         print(f"Error en eliminar_template: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/reset-device', methods=['POST'])
+def reset_device():
+    """Resetear completamente el dispositivo lector de huellas"""
+    try:
+        print("=== INICIANDO RESET COMPLETO DEL DISPOSITIVO ===")
+        
+        # 1. Cerrar dispositivo actual si está abierto
+        try:
+            if hasattr(controller, 'sgfplib') and controller.sgfplib:
+                print("Cerrando dispositivo actual...")
+                controller.sgfplib.CloseDevice()
+                print("Dispositivo cerrado")
+        except Exception as e:
+            print(f"Error al cerrar dispositivo: {e}")
+        
+        # 2. Reset del estado interno
+        controller.initialized = False
+        controller.device_opened = False
+        controller.current_device_id = None
+        print("Estado interno reseteado")
+        
+        # 3. Pausa para permitir que el dispositivo se libere
+        import time
+        print("Esperando 2 segundos para liberar el dispositivo...")
+        time.sleep(2)
+        
+        # 4. Reinicializar completamente
+        print("Reinicializando dispositivo...")
+        result = controller.initializeDevice()
+        
+        if result:
+            print("=== RESET COMPLETO EXITOSO ===")
+            return jsonify({
+                'success': True,
+                'message': 'Dispositivo reseteado e inicializado exitosamente',
+                'device_ready': True
+            })
+        else:
+            print("=== RESET FALLÓ ===")
+            return jsonify({
+                'success': False,
+                'message': 'Error al reinicializar el dispositivo después del reset',
+                'device_ready': False
+            }), 500
+            
+    except Exception as e:
+        print(f"Error durante el reset: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Error durante el reset: {str(e)}',
+            'device_ready': False
+        }), 500
+
+@app.route('/device-status', methods=['GET'])
+def device_status():
+    """Obtener el estado actual del dispositivo"""
+    try:
+        status = {
+            'initialized': controller.initialized,
+            'device_opened': hasattr(controller, 'device_opened') and controller.device_opened,
+            'current_device_id': getattr(controller, 'current_device_id', None)
+        }
+        
+        # Intentar obtener info del dispositivo para verificar si está realmente funcionando
+        try:
+            if controller.initialized:
+                width, height = controller.sgfplib.GetImageWidth(), controller.sgfplib.GetImageHeight()
+                status['device_responsive'] = True
+                status['image_dimensions'] = {'width': width, 'height': height}
+            else:
+                status['device_responsive'] = False
+        except Exception as e:
+            status['device_responsive'] = False
+            status['last_error'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/force-usb-reset', methods=['POST'])
+def force_usb_reset():
+    """Intento de reset USB programático (experimental)"""
+    try:
+        print("=== INICIANDO RESET USB PROGRAMÁTICO ===")
+        
+        # Buscar el dispositivo USB
+        import subprocess
+        import time
+        
+        # Obtener información del dispositivo USB
+        result = subprocess.run(['lsusb'], capture_output=True, text=True)
+        secugen_line = None
+        for line in result.stdout.split('\n'):
+            if 'Secugen' in line or '1162:' in line:
+                secugen_line = line
+                break
+        
+        if not secugen_line:
+            return jsonify({
+                'success': False,
+                'message': 'Dispositivo SecuGen no encontrado en USB'
+            }), 404
+        
+        print(f"Dispositivo encontrado: {secugen_line}")
+        
+        # Extraer bus y device
+        parts = secugen_line.split()
+        bus = parts[1]
+        device = parts[3].rstrip(':')
+        
+        print(f"Bus: {bus}, Device: {device}")
+        
+        # Intentar reset USB usando el kernel
+        try:
+            # Método 1: Reset por archivo de sistema
+            reset_path = f"/sys/bus/usb/devices/{bus}-{device}/authorized"
+            
+            # Desautorizar
+            subprocess.run(['sudo', 'sh', '-c', f'echo 0 > {reset_path}'], 
+                          capture_output=True, timeout=5)
+            time.sleep(1)
+            
+            # Reautorizar
+            subprocess.run(['sudo', 'sh', '-c', f'echo 1 > {reset_path}'], 
+                          capture_output=True, timeout=5)
+            time.sleep(3)  # Esperar re-enumeración
+            
+            print("Reset USB con authorized/unauthorized completado")
+            
+            # Intentar reinicializar
+            controller.initialized = False
+            controller.device_opened = False
+            result = controller.initializeDevice()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Reset USB programático exitoso',
+                'method': 'authorize_reset',
+                'device_reinitialized': result
+            })
+            
+        except Exception as e:
+            print(f"Método authorize/unauthorize falló: {e}")
+        
+        # Si llegamos aquí, los métodos programáticos fallaron
+        return jsonify({
+            'success': False,
+            'message': 'Los métodos de reset USB programático fallaron. Puede requerirse desconexión física.',
+            'recommendation': 'Usar /reset-device primero, si falla contactar soporte técnico'
+        }), 500
+        
+    except Exception as e:
+        print(f"Error en force_usb_reset: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Error en reset USB: {str(e)}'
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000) 
