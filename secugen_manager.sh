@@ -603,7 +603,7 @@ main() {
             log "✅ Instalación completada"
             ;;
         
-        "setup")
+                 "setup")
             check_root_needed "$1"
             log "=== CONFIGURACIÓN COMPLETA DEL SISTEMA ==="
             install_system_dependencies
@@ -612,15 +612,72 @@ main() {
             
             # Cambiar al usuario original para configurar Python
             if [ -n "$SUDO_USER" ]; then
-                sudo -u "$SUDO_USER" bash -c "
-                    cd '$APP_DIR'
-                    source /dev/stdin << 'EOF'
-$(declare -f setup_python_environment create_directories create_config_file log warning)
+                log "Configurando entorno Python como usuario $SUDO_USER..."
+                sudo -u "$SUDO_USER" bash << EOF
+cd '$APP_DIR'
+
+# Configurar entorno Python
+log() {
+    echo -e "${GREEN}[\$(date '+%Y-%m-%d %H:%M:%S')]${NC} \$1"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING]${NC} \$1"
+}
+
+setup_python_environment() {
+    log "Configurando entorno Python..."
+    
+    # Crear entorno virtual si no existe
+    if [ ! -d "$PYTHON_ENV" ]; then
+        python3 -m venv "$PYTHON_ENV"
+        log "✅ Entorno virtual creado"
+    fi
+    
+    # Activar entorno virtual
+    source "$PYTHON_ENV/bin/activate"
+    
+    # Actualizar pip
+    pip install --upgrade pip
+    
+    # Instalar dependencias básicas
+    pip install flask werkzeug flask-cors python-dotenv pyusb requests
+    
+    log "✅ Entorno Python configurado"
+}
+
+create_directories() {
+    log "Creando directorios necesarios..."
+    
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$APP_DIR/config"
+    mkdir -p "$APP_DIR/backups"
+    
+    log "✅ Directorios creados"
+}
+
+create_config_file() {
+    log "Creando archivo de configuración..."
+    
+    cat > "$CONFIG_FILE" << CONFIGEOF
+# Configuración de Producción
+FLASK_ENV=production
+FLASK_DEBUG=false
+FLASK_HOST=0.0.0.0
+FLASK_PORT=$SERVICE_PORT
+LOG_LEVEL=INFO
+LOG_FILE=$LOG_DIR/app.log
+LD_LIBRARY_PATH=$APP_DIR/lib/linux3
+PYTHONPATH=$APP_DIR
+CONFIGEOF
+    
+    log "✅ Archivo de configuración creado"
+}
+
 setup_python_environment
 create_directories
 create_config_file
 EOF
-                "
             else
                 setup_python_environment
                 create_directories
