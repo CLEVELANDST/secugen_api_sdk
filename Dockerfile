@@ -58,7 +58,7 @@ RUN mkdir -p /app/images && \
     chown -R secugen:secugen /app && \
     chmod -R 755 /app && \
     chmod 777 /app/images && \
-    chmod +x start.sh && \
+    chmod +x secugen_manager.sh && \
     chmod -R 777 /usr/local/lib/*.so && \
     chmod -R 777 /dev/bus/usb || true
 
@@ -75,4 +75,4 @@ USER secugen
 
 EXPOSE 5000
 
-CMD ["./start.sh"]
+CMD ["python3", "app.py"]
