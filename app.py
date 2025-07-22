@@ -611,9 +611,9 @@ def capturar_huella():
                 print("Dispositivo no inicializado, intentando recuperación...")
                 if not controller.auto_recovery():
                     raise Exception("No se pudo inicializar el dispositivo tras múltiples intentos")
-        
-        print("Obteniendo información del dispositivo...")
-        err = controller.sgfp.GetDeviceInfo(width, height)
+            
+            print("Obteniendo información del dispositivo...")
+            err = controller.sgfp.GetDeviceInfo(width, height)
         if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
             # Intentar recuperación automática si falla GetDeviceInfo
             print(f"Error al obtener info del dispositivo: {err}, intentando recuperación...")
