@@ -22,27 +22,124 @@ class SecugenController:
         self.recovery_attempts = 0
         self.max_recovery_attempts = 3
         self.last_error_time = None
+        
+        # PREVENCIÓN: Control de recursos y operaciones
+        import threading
+        self.operation_lock = threading.Lock()  # Prevenir operaciones concurrentes
+        self.operation_count = 0  # Contador de operaciones para limpieza preventiva
+        self.max_operations_before_refresh = 50  # Límite antes de refrescar SDK
+        self.last_successful_operation = time.time()
+        self.device_health_threshold = 300  # 5 minutos sin problemas = sano
         try:
             self.sgfp = PYSGFPLib()
             self.initializeDevice()
         except Exception as e:
             self.init_error = str(e)
             print(f"Error al crear instancia de SecugenController: {e}")
+
+    def preventive_maintenance(self):
+        """Mantenimiento preventivo del SDK para evitar acumulación de recursos"""
+        try:
+            current_time = time.time()
+            
+            # Si han pasado muchas operaciones, refrescar el SDK
+            if self.operation_count >= self.max_operations_before_refresh:
+                print(f"=== MANTENIMIENTO PREVENTIVO: {self.operation_count} operaciones ===")
+                self._refresh_sdk_connection()
+                self.operation_count = 0
+                return True
+                
+            # Si ha pasado mucho tiempo sin operaciones exitosas, verificar salud
+            if (current_time - self.last_successful_operation) > self.device_health_threshold:
+                print("=== VERIFICACIÓN PREVENTIVA: Tiempo excedido sin operaciones ===")
+                if not self._health_check():
+                    print("Health check falló, refrescando conexión...")
+                    self._refresh_sdk_connection()
+                    return True
+                    
+            return False
+        except Exception as e:
+            print(f"Error en mantenimiento preventivo: {e}")
+            return False
+    
+    def _health_check(self):
+        """Verificación rápida de salud del dispositivo"""
+        try:
+            if not self.initialized:
+                return False
+                
+            # Test simple: obtener info del dispositivo
+            width = c_long(0)
+            height = c_long(0)
+            result = self.sgfp.GetDeviceInfo(width, height)
+            return result == SGFDxErrorCode.SGFDX_ERROR_NONE
+        except:
+            return False
+    
+    def _refresh_sdk_connection(self):
+        """Refresca la conexión del SDK sin perder el estado inicializado"""
+        try:
+            print("Refrescando conexión SDK...")
+            
+            # Cerrar conexión actual
+            if self.sgfp:
+                try:
+                    self.sgfp.CloseDevice()
+                except:
+                    pass
+            
+            # Breve pausa para limpiar recursos
+            time.sleep(1)
+            
+            # Reinicializar SDK
+            self.sgfp = PYSGFPLib()
+            self.sgfp.Init()
+            
+            # Reabrir dispositivo
+            if self.current_device_id is not None:
+                result = self.sgfp.OpenDevice(self.current_device_id)
+                if result == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    print("Conexión SDK refrescada exitosamente")
+                    self.last_successful_operation = time.time()
+                    return True
+            
+            # Si no hay device_id guardado, buscar nuevamente
+            return self._reconnect_device()
+            
+        except Exception as e:
+            print(f"Error al refrescar conexión SDK: {e}")
+            return False
+    
+    def _reconnect_device(self):
+        """Reconecta al dispositivo buscando en todos los IDs disponibles"""
+        try:
+            for device_id in [0, 1]:
+                result = self.sgfp.OpenDevice(device_id)
+                if result == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    self.current_device_id = device_id
+                    print(f"Dispositivo reconectado exitosamente con ID: {device_id}")
+                    self.last_successful_operation = time.time()
+                    return True
+            return False
+        except Exception as e:
+            print(f"Error al reconectar dispositivo: {e}")
+            return False
     
     def auto_recovery(self):
-        """Intenta recuperación automática del dispositivo"""
+        """Intenta recuperación automática del dispositivo con múltiples niveles"""
         import time
         
         current_time = time.time()
         
         # Evitar intentos de recuperación muy frecuentes
-        if self.last_error_time and (current_time - self.last_error_time) < 5:
+        if self.last_error_time and (current_time - self.last_error_time) < 3:
             print("Esperando antes del siguiente intento de recuperación...")
             return False
         
         if self.recovery_attempts >= self.max_recovery_attempts:
             print(f"Máximo de intentos de recuperación alcanzado ({self.max_recovery_attempts})")
-            return False
+            # Intentar reset USB como último recurso
+            return self._emergency_usb_reset()
         
         self.recovery_attempts += 1
         self.last_error_time = current_time
@@ -50,35 +147,185 @@ class SecugenController:
         print(f"=== INTENTO DE RECUPERACIÓN AUTOMÁTICA #{self.recovery_attempts} ===")
         
         try:
-            # 1. Cerrar dispositivo si está abierto
-            try:
-                if self.sgfp:
-                    print("Cerrando dispositivo actual...")
-                    self.sgfp.CloseDevice()
-            except:
-                pass
-            
-            # 2. Reset del estado
-            self.initialized = False
-            self.device_opened = False
-            
-            # 3. Pausa corta
-            time.sleep(2)
-            
-            # 4. Reintentar inicialización
-            print("Reintentando inicialización...")
-            result = self.initializeDevice()
-            
-            if result:
-                print("=== RECUPERACIÓN AUTOMÁTICA EXITOSA ===")
-                self.recovery_attempts = 0  # Reset counter on success
-                return True
+            # Recuperación por niveles según el intento
+            if self.recovery_attempts == 1:
+                # Nivel 1: Recuperación básica
+                return self._basic_recovery()
+            elif self.recovery_attempts == 2:
+                # Nivel 2: Recuperación con pausa larga
+                return self._extended_recovery()
             else:
-                print(f"=== RECUPERACIÓN AUTOMÁTICA FALLÓ ===")
-                return False
+                # Nivel 3: Recuperación profunda
+                return self._deep_recovery()
                 
         except Exception as e:
             print(f"Error durante recuperación automática: {e}")
+            return False
+    
+    def _basic_recovery(self):
+        """Recuperación básica - rápida"""
+        import time
+        print("Ejecutando recuperación básica...")
+        
+        try:
+            if self.sgfp:
+                print("Cerrando dispositivo actual...")
+                self.sgfp.CloseDevice()
+        except:
+            pass
+        
+        self.initialized = False
+        self.device_opened = False
+        time.sleep(2)
+        
+        result = self.initializeDevice()
+        if result:
+            print("=== RECUPERACIÓN BÁSICA EXITOSA ===")
+            self.recovery_attempts = 0
+            return True
+        
+        print("Recuperación básica falló")
+        return False
+    
+    def _extended_recovery(self):
+        """Recuperación extendida - con pausa larga"""
+        import time
+        print("Ejecutando recuperación extendida...")
+        
+        try:
+            if self.sgfp:
+                self.sgfp.CloseDevice()
+        except:
+            pass
+        
+        # Reset más completo
+        self.initialized = False
+        self.device_opened = False
+        self.sgfp = None
+        
+        print("Pausa extendida de 5 segundos...")
+        time.sleep(5)
+        
+        # Recrear instancia completa
+        try:
+            from sdk import PYSGFPLib
+            self.sgfp = PYSGFPLib()
+            result = self.initializeDevice()
+            
+            if result:
+                print("=== RECUPERACIÓN EXTENDIDA EXITOSA ===")
+                self.recovery_attempts = 0
+                return True
+        except Exception as e:
+            print(f"Error en recuperación extendida: {e}")
+        
+        print("Recuperación extendida falló")
+        return False
+    
+    def _deep_recovery(self):
+        """Recuperación profunda - reset completo con verificaciones"""
+        import time
+        print("Ejecutando recuperación profunda...")
+        
+        # Reset total del estado
+        try:
+            if self.sgfp:
+                self.sgfp.CloseDevice()
+        except:
+            pass
+        
+        self.initialized = False
+        self.device_opened = False
+        self.sgfp = None
+        self.init_error = None
+        
+        print("Pausa profunda de 8 segundos...")
+        time.sleep(8)
+        
+        # Recrear desde cero con verificaciones
+        try:
+            from sdk import PYSGFPLib
+            print("Recreando instancia SDK...")
+            self.sgfp = PYSGFPLib()
+            
+            # Múltiples intentos de inicialización
+            for attempt in range(3):
+                print(f"Intento de inicialización profunda {attempt + 1}/3")
+                time.sleep(2)
+                
+                result = self.initializeDevice()
+                if result:
+                    print("=== RECUPERACIÓN PROFUNDA EXITOSA ===")
+                    self.recovery_attempts = 0
+                    return True
+                
+                print(f"Intento {attempt + 1} falló, continuando...")
+        
+        except Exception as e:
+            print(f"Error en recuperación profunda: {e}")
+        
+        print("Recuperación profunda falló")
+        return False
+    
+    def _emergency_usb_reset(self):
+        """Reset USB de emergencia cuando todo lo demás falla"""
+        print("=== INICIANDO RESET USB DE EMERGENCIA ===")
+        
+        try:
+            import subprocess
+            import time
+            
+            # Buscar dispositivo USB
+            result = subprocess.run(['lsusb'], capture_output=True, text=True, timeout=10)
+            secugen_line = None
+            for line in result.stdout.split('\n'):
+                if 'Secugen' in line or '1162:' in line:
+                    secugen_line = line
+                    break
+            
+            if secugen_line:
+                parts = secugen_line.split()
+                bus = parts[1]
+                device = parts[3].rstrip(':')
+                
+                print(f"Reset USB de emergencia - Bus: {bus}, Device: {device}")
+                
+                # Reset USB usando authorized
+                reset_path = f"/sys/bus/usb/devices/{bus}-{device}/authorized"
+                
+                try:
+                    # Desautorizar
+                    subprocess.run(['sudo', 'sh', '-c', f'echo 0 > {reset_path}'], 
+                                  capture_output=True, timeout=5)
+                    time.sleep(2)
+                    
+                    # Reautorizar
+                    subprocess.run(['sudo', 'sh', '-c', f'echo 1 > {reset_path}'], 
+                                  capture_output=True, timeout=5)
+                    time.sleep(5)
+                    
+                    # Reinicializar después del reset USB
+                    self.initialized = False
+                    self.device_opened = False
+                    self.sgfp = None
+                    self.recovery_attempts = 0
+                    
+                    from sdk import PYSGFPLib
+                    self.sgfp = PYSGFPLib()
+                    result = self.initializeDevice()
+                    
+                    if result:
+                        print("=== RESET USB DE EMERGENCIA EXITOSO ===")
+                        return True
+                    
+                except Exception as usb_error:
+                    print(f"Error en reset USB: {usb_error}")
+            
+            print("Reset USB de emergencia falló")
+            return False
+            
+        except Exception as e:
+            print(f"Error crítico en reset de emergencia: {e}")
             return False
 
     def initializeDevice(self):
@@ -103,6 +350,7 @@ class SecugenController:
                 err = self.sgfp.OpenDevice(device_id)
                 if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
                     device_opened = True
+                    self.current_device_id = device_id  # PREVENCIÓN: Guardar ID para reconexión
                     print(f"Dispositivo abierto exitosamente con ID: {device_id}")
                     break
                 else:
@@ -112,6 +360,7 @@ class SecugenController:
                 raise Exception(f"No se pudo abrir el dispositivo con ningún ID")
 
             self.initialized = True
+            self.last_successful_operation = time.time()  # PREVENCIÓN: Actualizar tiempo de éxito
             print("Dispositivo inicializado correctamente")
             return True
         except Exception as e:
@@ -120,41 +369,51 @@ class SecugenController:
             return False
     
     def led_control(self, state):
-        try:
-            if not self.initialized:
-                # Intentar reinicializar si falló anteriormente
-                if not self.initializeDevice():
-                    raise Exception(f"Dispositivo no inicializado. Error original: {self.init_error}")
-            
-            print(f"Intentando {'encender' if state else 'apagar'} el LED del lector...")
-            
-            result = self.sgfp.SetLedOn(state)
-            print(f"Resultado de SetLedOn: {result}")
-            
-            if result != SGFDxErrorCode.SGFDX_ERROR_NONE:
-                error_msg = {
-                    2: "Error de acceso al dispositivo. Verifique permisos y conexión USB",
-                    3: "Error de índice del dispositivo",
-                    4: "Dispositivo no encontrado",
-                    5: "Error al abrir el dispositivo"
-                }.get(result, f"Error desconocido: {result}")
+        with self.operation_lock:  # PREVENCIÓN: Evitar operaciones concurrentes
+            try:
+                # PREVENCIÓN: Mantenimiento antes de cada operación crítica
+                self.preventive_maintenance()
                 
-                # Intentar recuperación automática si es error de acceso
-                if result == 2:  # Error de acceso al dispositivo
-                    print("Detectado error de acceso, intentando recuperación automática...")
-                    if self.auto_recovery():
-                        # Reintentar la operación después de la recuperación
-                        print("Reintentando operación LED después de recuperación...")
-                        retry_result = self.sgfp.SetLedOn(state)
-                        if retry_result == SGFDxErrorCode.SGFDX_ERROR_NONE:
-                            return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'} (tras recuperación)"}
+                if not self.initialized:
+                    # Intentar reinicializar si falló anteriormente
+                    if not self.initializeDevice():
+                        raise Exception(f"Dispositivo no inicializado. Error original: {self.init_error}")
                 
-                raise Exception(f"Error al controlar LED: {error_msg}")
-            
-            return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'}"}
-        except Exception as e:
-            print(f"Error en led_control: {str(e)}")
-            return {"success": False, "error": str(e)}
+                print(f"Intentando {'encender' if state else 'apagar'} el LED del lector...")
+                
+                result = self.sgfp.SetLedOn(state)
+                print(f"Resultado de SetLedOn: {result}")
+                
+                if result != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                    error_msg = {
+                        2: "Error de acceso al dispositivo. Verifique permisos y conexión USB",
+                        3: "Error de índice del dispositivo",
+                        4: "Dispositivo no encontrado",
+                        5: "Error al abrir el dispositivo"
+                    }.get(result, f"Error desconocido: {result}")
+                    
+                    # Intentar recuperación automática si es error de acceso
+                    if result == 2:  # Error de acceso al dispositivo
+                        print("Detectado error de acceso, intentando recuperación automática...")
+                        if self.auto_recovery():
+                            # Reintentar la operación después de la recuperación
+                            print("Reintentando operación LED después de recuperación...")
+                            retry_result = self.sgfp.SetLedOn(state)
+                            if retry_result == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                                # PREVENCIÓN: Operación exitosa tras recuperación
+                                self.last_successful_operation = time.time()
+                                self.operation_count += 1
+                                return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'} (tras recuperación)"}
+                    
+                    raise Exception(f"Error al controlar LED: {error_msg}")
+                
+                # PREVENCIÓN: Operación exitosa
+                self.last_successful_operation = time.time()
+                self.operation_count += 1
+                return {"success": True, "message": f"LED del lector {'encendido' if state else 'apagado'}"}
+            except Exception as e:
+                print(f"Error en led_control: {str(e)}")
+                return {"success": False, "error": str(e)}
 
     def create_template(self, image_buffer):
         """Crear template a partir de una imagen de huella"""
@@ -333,21 +592,25 @@ def control_led():
 
 @app.route('/capturar-huella', methods=['POST'])
 def capturar_huella():
-    try:
-        data = request.get_json() or {}
-        save_image = data.get('save_image', False)  # Por defecto no guardar
-        create_template = data.get('create_template', False)  # Por defecto no crear template
-        template_id = data.get('template_id', None)  # ID para almacenar template
-        
-        # Inicializar variables para width y height
-        width = c_long(258)    # Ancho típico del sensor
-        height = c_long(336)   # Alto típico del sensor
-        
-        # Verificar estado del dispositivo antes de continuar
-        if not controller.initialized:
-            print("Dispositivo no inicializado, intentando recuperación...")
-            if not controller.auto_recovery():
-                raise Exception("No se pudo inicializar el dispositivo tras múltiples intentos")
+    with controller.operation_lock:  # PREVENCIÓN: Evitar operaciones concurrentes críticas
+        try:
+            # PREVENCIÓN: Mantenimiento preventivo antes de operaciones críticas
+            controller.preventive_maintenance()
+            
+            data = request.get_json() or {}
+            save_image = data.get('save_image', False)  # Por defecto no guardar
+            create_template = data.get('create_template', False)  # Por defecto no crear template
+            template_id = data.get('template_id', None)  # ID para almacenar template
+            
+            # Inicializar variables para width y height
+            width = c_long(258)    # Ancho típico del sensor
+            height = c_long(336)   # Alto típico del sensor
+            
+            # Verificar estado del dispositivo antes de continuar
+            if not controller.initialized:
+                print("Dispositivo no inicializado, intentando recuperación...")
+                if not controller.auto_recovery():
+                    raise Exception("No se pudo inicializar el dispositivo tras múltiples intentos")
         
         print("Obteniendo información del dispositivo...")
         err = controller.sgfp.GetDeviceInfo(width, height)
@@ -474,6 +737,10 @@ def capturar_huella():
                 print(f"Error al guardar imagen: {e}")
                 pass
         
+        # PREVENCIÓN: Operación exitosa - actualizar contadores
+        controller.last_successful_operation = time.time()
+        controller.operation_count += 1
+        
         return jsonify({
             'success': True,
             'data': {
@@ -486,7 +753,9 @@ def capturar_huella():
                 'mensaje': 'Huella capturada exitosamente',
                 'template_stored': template_id if template_id and template_created else None,
                 'capture_attempts': max_attempts,
-                'device_status': 'responsive'
+                'device_status': 'responsive',
+                'operation_count': controller.operation_count,  # DIAGNÓSTICO: Mostrar contador de operaciones
+                'last_maintenance': controller.operation_count >= controller.max_operations_before_refresh - 10  # Advertir si se acerca mantenimiento
             }
         })
 
@@ -606,9 +875,9 @@ def reset_device():
         
         # 1. Cerrar dispositivo actual si está abierto
         try:
-            if hasattr(controller, 'sgfplib') and controller.sgfplib:
+            if hasattr(controller, 'sgfp') and controller.sgfp:
                 print("Cerrando dispositivo actual...")
-                controller.sgfplib.CloseDevice()
+                controller.sgfp.CloseDevice()
                 print("Dispositivo cerrado")
         except Exception as e:
             print(f"Error al cerrar dispositivo: {e}")
@@ -617,6 +886,7 @@ def reset_device():
         controller.initialized = False
         controller.device_opened = False
         controller.current_device_id = None
+        controller.recovery_attempts = 0  # Reset del contador también
         print("Estado interno reseteado")
         
         # 3. Pausa para permitir que el dispositivo se libere
@@ -663,10 +933,17 @@ def device_status():
         
         # Intentar obtener info del dispositivo para verificar si está realmente funcionando
         try:
-            if controller.initialized:
-                width, height = controller.sgfplib.GetImageWidth(), controller.sgfplib.GetImageHeight()
-                status['device_responsive'] = True
-                status['image_dimensions'] = {'width': width, 'height': height}
+            if controller.initialized and controller.sgfp:
+                from ctypes import c_long
+                width = c_long(0)
+                height = c_long(0)
+                err = controller.sgfp.GetDeviceInfo(width, height)
+                if err == 0:  # SGFDxErrorCode.SGFDX_ERROR_NONE
+                    status['device_responsive'] = True
+                    status['image_dimensions'] = {'width': width.value, 'height': height.value}
+                else:
+                    status['device_responsive'] = False
+                    status['last_error'] = f'Error GetDeviceInfo: {err}'
             else:
                 status['device_responsive'] = False
         except Exception as e:
@@ -683,7 +960,7 @@ def device_status():
             'success': False,
             'error': str(e)
         }), 500
-
+#test
 @app.route('/force-usb-reset', methods=['POST'])
 def force_usb_reset():
     """Intento de reset USB programático (experimental)"""

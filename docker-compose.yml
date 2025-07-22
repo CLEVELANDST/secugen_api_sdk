@@ -1,16 +1,17 @@
 services:
   api:
     build: .
-    privileged: true
-    devices:
-      - "/dev/bus/usb:/dev/bus/usb"
-    volumes:
-      - "/dev/bus/usb:/dev/bus/usb"
-      - "./images:/app/images"
     ports:
       - "5000:5000"
+    volumes:
+      - /dev:/dev
+    privileged: true
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
     environment:
-      - LD_LIBRARY_PATH=/usr/local/lib
+      - UDEV=1
+    depends_on:
+      - db
     restart: unless-stopped
 
   db:
