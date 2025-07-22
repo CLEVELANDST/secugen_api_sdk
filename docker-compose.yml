@@ -10,13 +10,6 @@ services:
       - /dev/bus/usb:/dev/bus/usb
     environment:
       - UDEV=1
-    depends_on:
-      - db
+      - MONGODB_URI=mongodb://localhost:27017/fingerprints
+    network_mode: host
     restart: unless-stopped
-
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: fingerprints
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
