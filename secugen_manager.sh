@@ -186,14 +186,11 @@ setup_python_environment() {
         log "✅ Entorno virtual creado"
     fi
     
-    # Activar entorno virtual
-    source "$PYTHON_ENV/bin/activate"
-    
-    # Actualizar pip
-    pip install --upgrade pip
+    # Usar pip del entorno virtual directamente
+    "$PYTHON_ENV/bin/pip" install --upgrade pip
     
     # Instalar dependencias básicas
-    pip install flask werkzeug flask-cors python-dotenv pyusb requests
+    "$PYTHON_ENV/bin/pip" install flask werkzeug flask-cors python-dotenv pyusb requests
     
     log "✅ Entorno Python configurado"
 }
@@ -634,14 +631,11 @@ setup_python_environment() {
         log "✅ Entorno virtual creado"
     fi
     
-    # Activar entorno virtual
-    source "$PYTHON_ENV/bin/activate"
-    
-    # Actualizar pip
-    pip install --upgrade pip
+    # Usar pip del entorno virtual directamente
+    "$PYTHON_ENV/bin/pip" install --upgrade pip
     
     # Instalar dependencias básicas
-    pip install flask werkzeug flask-cors python-dotenv pyusb requests
+    "$PYTHON_ENV/bin/pip" install flask werkzeug flask-cors python-dotenv pyusb requests
     
     log "✅ Entorno Python configurado"
 }
