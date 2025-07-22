@@ -614,173 +614,173 @@ def capturar_huella():
             
             print("Obteniendo información del dispositivo...")
             err = controller.sgfp.GetDeviceInfo(width, height)
-        if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
-            # Intentar recuperación automática si falla GetDeviceInfo
-            print(f"Error al obtener info del dispositivo: {err}, intentando recuperación...")
-            if controller.auto_recovery():
-                # Reintentar después de recuperación
-                err = controller.sgfp.GetDeviceInfo(width, height)
-                if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
-                    raise Exception(f'Error al obtener información del dispositivo tras recuperación: {err}')
-            else:
-                raise Exception(f'Error al obtener información del dispositivo: {err}')
-        
-        print(f"Dimensiones del sensor: {width.value}x{height.value}")
-        
-        # Validar dimensiones antes de crear buffer (SEGURIDAD)
-        if width.value <= 0 or height.value <= 0 or width.value > 1000 or height.value > 1000:
-            raise Exception(f"Dimensiones del sensor inválidas: {width.value}x{height.value}")
-        
-        # Crear buffer del tamaño correcto con protección
-        buffer_size = width.value * height.value
-        if buffer_size > 1000000:  # Máximo 1MB de buffer
-            raise Exception(f"Buffer de imagen demasiado grande: {buffer_size} bytes")
-        
-        try:
-            imageBuffer = bytearray(buffer_size)
-        except MemoryError:
-            raise Exception(f"No se pudo asignar memoria para buffer de {buffer_size} bytes")
-        
-        print("Encendiendo LED...")
-        led_result = controller.led_control(True)  # Encender LED
-        
-        if not led_result.get('success', False):
-            print(f"Advertencia: No se pudo encender LED: {led_result.get('error')}")
-            # Continuar sin LED si es necesario
-        
-        print("Capturando imagen...")
-        print("Tamaño del buffer:", len(imageBuffer))
-        
-        # Modificación de intentos y tiempo de espera con timeout total
-        max_attempts = 3  # Reducido para evitar bloqueos largos
-        wait_time = 1    # Reducido a 1 segundo
-        total_timeout = 10  # Máximo 10 segundos total
-        start_time = time.time()
-        
-        capture_success = False
-        for attempt in range(max_attempts):
-            print(f"Intento {attempt + 1} de {max_attempts}")
+            if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                # Intentar recuperación automática si falla GetDeviceInfo
+                print(f"Error al obtener info del dispositivo: {err}, intentando recuperación...")
+                if controller.auto_recovery():
+                    # Reintentar después de recuperación
+                    err = controller.sgfp.GetDeviceInfo(width, height)
+                    if err != SGFDxErrorCode.SGFDX_ERROR_NONE:
+                        raise Exception(f'Error al obtener información del dispositivo tras recuperación: {err}')
+                else:
+                    raise Exception(f'Error al obtener información del dispositivo: {err}')
             
-            # Verificar timeout total
-            if (time.time() - start_time) > total_timeout:
-                print("Timeout total alcanzado, abortando captura")
-                break
-            
+            print(f"Dimensiones del sensor: {width.value}x{height.value}")
+        
+            # Validar dimensiones antes de crear buffer (SEGURIDAD)
+            if width.value <= 0 or height.value <= 0 or width.value > 1000 or height.value > 1000:
+                raise Exception(f"Dimensiones del sensor inválidas: {width.value}x{height.value}")
+        
+            # Crear buffer del tamaño correcto con protección
+            buffer_size = width.value * height.value
+            if buffer_size > 1000000:  # Máximo 1MB de buffer
+                raise Exception(f"Buffer de imagen demasiado grande: {buffer_size} bytes")
+        
             try:
-                err = controller.sgfp.GetImage(imageBuffer)
-                if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
-                    capture_success = True
+                imageBuffer = bytearray(buffer_size)
+            except MemoryError:
+                raise Exception(f"No se pudo asignar memoria para buffer de {buffer_size} bytes")
+        
+            print("Encendiendo LED...")
+            led_result = controller.led_control(True)  # Encender LED
+        
+            if not led_result.get('success', False):
+                print(f"Advertencia: No se pudo encender LED: {led_result.get('error')}")
+                # Continuar sin LED si es necesario
+        
+            print("Capturando imagen...")
+            print("Tamaño del buffer:", len(imageBuffer))
+        
+            # Modificación de intentos y tiempo de espera con timeout total
+            max_attempts = 3  # Reducido para evitar bloqueos largos
+            wait_time = 1    # Reducido a 1 segundo
+            total_timeout = 10  # Máximo 10 segundos total
+            start_time = time.time()
+        
+            capture_success = False
+            for attempt in range(max_attempts):
+                print(f"Intento {attempt + 1} de {max_attempts}")
+                
+                # Verificar timeout total
+                if (time.time() - start_time) > total_timeout:
+                    print("Timeout total alcanzado, abortando captura")
                     break
-                elif err == 2:  # Error de acceso al dispositivo
-                    print("Error de acceso detectado, intentando recuperación...")
-                    if controller.auto_recovery():
-                        print("Recuperación exitosa, reintentando captura...")
-                        continue
-                    else:
-                        print("Recuperación falló")
+                
+                try:
+                    err = controller.sgfp.GetImage(imageBuffer)
+                    if err == SGFDxErrorCode.SGFDX_ERROR_NONE:
+                        capture_success = True
                         break
-                else:
-                    print(f"Error en captura: {err}")
-            except Exception as capture_error:
-                print(f"Excepción durante captura: {capture_error}")
-                break
-            
-            if attempt < max_attempts - 1:  # No esperar después del último intento
-                time.sleep(wait_time)
+                    elif err == 2:  # Error de acceso al dispositivo
+                        print("Error de acceso detectado, intentando recuperación...")
+                        if controller.auto_recovery():
+                            print("Recuperación exitosa, reintentando captura...")
+                            continue
+                        else:
+                            print("Recuperación falló")
+                            break
+                    else:
+                        print(f"Error en captura: {err}")
+                except Exception as capture_error:
+                    print(f"Excepción durante captura: {capture_error}")
+                    break
+                
+                if attempt < max_attempts - 1:  # No esperar después del último intento
+                    time.sleep(wait_time)
         
-        # Siempre intentar apagar LED, incluso si hay errores
-        print("Apagando LED...")
-        try:
-            controller.led_control(False)
-        except Exception as led_error:
-            print(f"Error al apagar LED: {led_error}")
-            # No es crítico si no se puede apagar el LED
+            # Siempre intentar apagar LED, incluso si hay errores
+            print("Apagando LED...")
+            try:
+                controller.led_control(False)
+            except Exception as led_error:
+                print(f"Error al apagar LED: {led_error}")
+                # No es crítico si no se puede apagar el LED
         
-        if not capture_success:
-            raise Exception(f'Error al capturar la huella tras {max_attempts} intentos. Último error: {err if "err" in locals() else "Timeout o error desconocido"}')
+            if not capture_success:
+                raise Exception(f'Error al capturar la huella tras {max_attempts} intentos. Último error: {err if "err" in locals() else "Timeout o error desconocido"}')
 
-        # Convertir a base64
-        imagen_base64 = base64.b64encode(bytes(imageBuffer)).decode('utf-8')
+            # Convertir a base64
+            imagen_base64 = base64.b64encode(bytes(imageBuffer)).decode('utf-8')
         
-        # Crear template si se solicita (con manejo de errores mejorado)
-        template_base64 = None
-        template_created = False
-        if create_template:
-            try:
-                print("Iniciando creación de template...")
-                template_data = controller.create_template(imageBuffer)
-                if template_data and len(template_data) > 0:
-                    template_base64 = base64.b64encode(bytes(template_data)).decode('utf-8')
-                    template_created = True
-                    print(f"Template creado exitosamente, tamaño: {len(template_data)} bytes")
-                    
-                    # Almacenar template si se proporciona ID
-                    if template_id:
-                        try:
-                            store_result = controller.store_template(template_id, template_data)
-                            print(f"Template almacenado con ID {template_id}: {store_result}")
-                        except Exception as store_error:
-                            print(f"Advertencia: Error al almacenar template: {store_error}")
-                            # No es crítico si no se puede almacenar
-                else:
-                    print("Advertencia: No se pudo crear template válido")
-            except Exception as template_error:
-                print(f"Advertencia: Error en creación de template: {template_error}")
-                # No lanzar excepción, solo continuar sin template
+            # Crear template si se solicita (con manejo de errores mejorado)
+            template_base64 = None
+            template_created = False
+            if create_template:
+                try:
+                    print("Iniciando creación de template...")
+                    template_data = controller.create_template(imageBuffer)
+                    if template_data and len(template_data) > 0:
+                        template_base64 = base64.b64encode(bytes(template_data)).decode('utf-8')
+                        template_created = True
+                        print(f"Template creado exitosamente, tamaño: {len(template_data)} bytes")
+                        
+                        # Almacenar template si se proporciona ID
+                        if template_id:
+                            try:
+                                store_result = controller.store_template(template_id, template_data)
+                                print(f"Template almacenado con ID {template_id}: {store_result}")
+                            except Exception as store_error:
+                                print(f"Advertencia: Error al almacenar template: {store_error}")
+                                # No es crítico si no se puede almacenar
+                    else:
+                        print("Advertencia: No se pudo crear template válido")
+                except Exception as template_error:
+                    print(f"Advertencia: Error en creación de template: {template_error}")
+                    # No lanzar excepción, solo continuar sin template
         
-        # Guardar la imagen solo si se solicita
-        if save_image:
+            # Guardar la imagen solo si se solicita
+            if save_image:
+                try:
+                    with open('/app/images/huella.png', 'wb') as f:
+                        f.write(base64.b64decode(imagen_base64))
+                except Exception as e:
+                    print(f"Error al guardar imagen: {e}")
+                    pass
+        
+            # PREVENCIÓN: Operación exitosa - actualizar contadores
+            controller.last_successful_operation = time.time()
+            controller.operation_count += 1
+        
+            return jsonify({
+                'success': True,
+                'data': {
+                    'imagen': imagen_base64,
+                    'template': template_base64,
+                    'template_created': template_created,
+                    'width': width.value,
+                    'height': height.value,
+                    'buffer_size': buffer_size,
+                    'mensaje': 'Huella capturada exitosamente',
+                    'template_stored': template_id if template_id and template_created else None,
+                    'capture_attempts': max_attempts,
+                    'device_status': 'responsive',
+                    'operation_count': controller.operation_count,  # DIAGNÓSTICO: Mostrar contador de operaciones
+                    'last_maintenance': controller.operation_count >= controller.max_operations_before_refresh - 10  # Advertir si se acerca mantenimiento
+                }
+            })
+
+        except Exception as e:
+            # Asegurarse de apagar el LED en caso de error
             try:
-                with open('/app/images/huella.png', 'wb') as f:
-                    f.write(base64.b64decode(imagen_base64))
-            except Exception as e:
-                print(f"Error al guardar imagen: {e}")
+                print("Apagando LED tras error...")
+                controller.led_control(False)
+            except Exception as led_cleanup_error:
+                print(f"Error al apagar LED durante limpieza: {led_cleanup_error}")
                 pass
-        
-        # PREVENCIÓN: Operación exitosa - actualizar contadores
-        controller.last_successful_operation = time.time()
-        controller.operation_count += 1
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'imagen': imagen_base64,
-                'template': template_base64,
-                'template_created': template_created,
-                'width': width.value,
-                'height': height.value,
-                'buffer_size': buffer_size,
-                'mensaje': 'Huella capturada exitosamente',
-                'template_stored': template_id if template_id and template_created else None,
-                'capture_attempts': max_attempts,
-                'device_status': 'responsive',
-                'operation_count': controller.operation_count,  # DIAGNÓSTICO: Mostrar contador de operaciones
-                'last_maintenance': controller.operation_count >= controller.max_operations_before_refresh - 10  # Advertir si se acerca mantenimiento
+            
+            error_msg = str(e)
+            print(f"Error en capturar_huella: {error_msg}")
+            
+            # Agregar información de diagnóstico
+            diagnostic_info = {
+                'error': error_msg,
+                'device_initialized': controller.initialized,
+                'recovery_attempts': getattr(controller, 'recovery_attempts', 0),
+                'timestamp': time.time(),
+                'suggestion': 'Verifique la conexión del dispositivo y reinicie si persiste el error'
             }
-        })
-
-    except Exception as e:
-        # Asegurarse de apagar el LED en caso de error
-        try:
-            print("Apagando LED tras error...")
-            controller.led_control(False)
-        except Exception as led_cleanup_error:
-            print(f"Error al apagar LED durante limpieza: {led_cleanup_error}")
-            pass
-        
-        error_msg = str(e)
-        print(f"Error en capturar_huella: {error_msg}")
-        
-        # Agregar información de diagnóstico
-        diagnostic_info = {
-            'error': error_msg,
-            'device_initialized': controller.initialized,
-            'recovery_attempts': getattr(controller, 'recovery_attempts', 0),
-            'timestamp': time.time(),
-            'suggestion': 'Verifique la conexión del dispositivo y reinicie si persiste el error'
-        }
-        
-        return jsonify(diagnostic_info), 500
+            
+            return jsonify(diagnostic_info), 500
 
 @app.route('/comparar-huellas', methods=['POST'])
 def comparar_huellas():
